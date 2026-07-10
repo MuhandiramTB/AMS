@@ -12,6 +12,7 @@ export function LoginPage() {
   const { login } = useAuth();
   const { register, handleSubmit, formState } = useForm<LoginForm>();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const onSubmit = handleSubmit(async (values) => {
     setServerError(null);
@@ -48,13 +49,24 @@ export function LoginPage() {
         <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="password">
           Password
         </label>
-        <input
-          id="password"
-          type="password"
-          className="mb-4 w-full rounded border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-          {...register('password', { required: true })}
-          autoComplete="current-password"
-        />
+        <div className="relative mb-4">
+          <input
+            id="password"
+            type={showPassword ? 'text' : 'password'}
+            className="w-full rounded border border-slate-300 px-3 py-2 pr-16 focus:border-blue-500 focus:outline-none"
+            {...register('password', { required: true })}
+            autoComplete="current-password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-pressed={showPassword}
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-sm font-medium text-slate-500 hover:text-slate-700 focus:outline-none focus:text-blue-600"
+          >
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
 
         {serverError && (
           <p role="alert" className="mb-4 text-sm text-red-600">
