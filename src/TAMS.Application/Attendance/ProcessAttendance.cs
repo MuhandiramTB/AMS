@@ -18,6 +18,7 @@ public sealed class ProcessAttendanceHandler : IRequestHandler<ProcessAttendance
     private readonly IAttendanceRepository _attendance;
     private readonly ISchedulingRepository _scheduling;
     private readonly IEmployeeRepository _employees;
+    private readonly ILeaveRepository _leave;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AttendanceCalculator _calculator;
     private readonly ShiftResolver _shiftResolver;
@@ -26,6 +27,7 @@ public sealed class ProcessAttendanceHandler : IRequestHandler<ProcessAttendance
         IAttendanceRepository attendance,
         ISchedulingRepository scheduling,
         IEmployeeRepository employees,
+        ILeaveRepository leave,
         IUnitOfWork unitOfWork,
         AttendanceCalculator calculator,
         ShiftResolver shiftResolver)
@@ -33,6 +35,7 @@ public sealed class ProcessAttendanceHandler : IRequestHandler<ProcessAttendance
         _attendance = attendance;
         _scheduling = scheduling;
         _employees = employees;
+        _leave = leave;
         _unitOfWork = unitOfWork;
         _calculator = calculator;
         _shiftResolver = shiftResolver;
@@ -55,8 +58,9 @@ public sealed class ProcessAttendanceHandler : IRequestHandler<ProcessAttendance
             .Select(p => new PunchInput(p.PunchedAtUtc, p.Direction))
             .ToList();
 
-        // Leave integration arrives in Phase 4; for now no day is leave-covered.
-        var result = _calculator.Calculate(request.WorkDate, shift, inputs, isLeaveCovered: false);
+        // Approved leave overrides absence for the covered day. (FR-ATT-007, BRULE-06.)
+        var coveringLeave = await _leave.GetCoveringLeaveAsync(employee.Id, request.WorkDate, cancellationToken);
+        var result = _calculator.Calculate(request.WorkDate, shift, inputs, isLeaveCovered: coveringLeave.Count > 0);
 
         // Upsert the record.
         var record = await _attendance.GetRecordAsync(employee.Id, request.WorkDate, cancellationToken);

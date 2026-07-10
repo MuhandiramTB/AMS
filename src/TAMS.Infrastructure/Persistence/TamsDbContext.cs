@@ -4,6 +4,7 @@ using TAMS.Domain.Attendance;
 using TAMS.Domain.Audit;
 using TAMS.Domain.Devices;
 using TAMS.Domain.Identity;
+using TAMS.Domain.Leave;
 using TAMS.Domain.Scheduling;
 using TAMS.Domain.Workforce;
 
@@ -48,6 +49,9 @@ public sealed class TamsDbContext : DbContext, IUnitOfWork
     public DbSet<DeviceSyncState> DeviceSyncStates => Set<DeviceSyncState>();
     public DbSet<DeviceEventLog> DeviceEventLogs => Set<DeviceEventLog>();
     public DbSet<EmployeeDeviceEnrollment> EmployeeDeviceEnrollments => Set<EmployeeDeviceEnrollment>();
+    public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

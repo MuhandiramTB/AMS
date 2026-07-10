@@ -30,6 +30,12 @@ public static class Permissions
     public const string EmployeeReadAll = "Employee.ReadAll";
     public const string AttendanceReadAll = "Attendance.ReadAll";
 
+    // Leave
+    public const string LeaveRead = "Leave.Read";
+    public const string LeaveRequest = "Leave.Request";
+    public const string LeaveApprove = "Leave.Approve";
+    public const string LeaveManage = "Leave.Manage"; // types + balances (HR/Admin)
+
     // Devices
     public const string DeviceRead = "Device.Read";
     public const string DeviceManage = "Device.Manage";
@@ -54,6 +60,10 @@ public static class Permissions
         AttendanceCorrect,
         EmployeeReadAll,
         AttendanceReadAll,
+        LeaveRead,
+        LeaveRequest,
+        LeaveApprove,
+        LeaveManage,
         DeviceRead,
         DeviceManage,
         UserManage,
