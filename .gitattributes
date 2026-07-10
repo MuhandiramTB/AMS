@@ -1,0 +1,31 @@
+# Normalize line endings so diffs are clean across OSes.
+# Text files are stored with LF in the repo; Git converts on checkout per-OS.
+* text=auto eol=lf
+
+# Explicit text types
+*.cs        text eol=lf
+*.csproj    text eol=lf
+*.sln       text eol=crlf
+*.json      text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.props     text eol=lf
+*.config    text eol=lf
+.editorconfig text eol=lf
+
+# Binary — never touch
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pfx       binary
+*.dll       binary
+*.snk       binary
