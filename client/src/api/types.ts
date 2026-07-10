@@ -173,6 +173,26 @@ export interface LeaveBalance {
   remainingDays: number;
 }
 
+// --- Reporting / dashboards (P5) ---
+export interface DepartmentCount {
+  departmentId: number;
+  present: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+}
+
+export interface AttendanceSummary {
+  workDate: string; // yyyy-MM-dd
+  present: number;
+  late: number;
+  earlyLeave: number;
+  absent: number;
+  onLeave: number;
+  openExceptions: number;
+  byDepartment: DepartmentCount[];
+}
+
 /** RFC 9457 problem details shape (05 §6). */
 export interface ProblemDetails {
   type?: string;

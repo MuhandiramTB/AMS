@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { apiClient, toApiError } from './client';
 import type {
   AttendanceRecord,
+  AttendanceSummary,
   Department,
   Device,
   DeviceSyncState,
@@ -353,3 +354,22 @@ export const useApproveLeave = () =>
   useLeaveDecision((id) => `/leave/requests/${id}/approve`, () => ({ allowOverride: false }));
 export const useRejectLeave = () => useLeaveDecision((id) => `/leave/requests/${id}/reject`);
 export const useCancelLeave = () => useLeaveDecision((id) => `/leave/requests/${id}/cancel`);
+
+// --- Reporting / dashboards (P5) ---
+export function useAttendanceSummary(
+  workDate?: string,
+  departmentId?: number,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = options.enabled ?? true;
+  return useQuery({
+    queryKey: ['attendance-summary', workDate ?? null, departmentId ?? null],
+    enabled,
+    queryFn: async () =>
+      (await apiClient.get<AttendanceSummary>('/dashboards/attendance-summary', {
+        params: { workDate, departmentId },
+      })).data,
+    // The dashboard should feel near-live without hammering the API (FR-RPT-001).
+    refetchInterval: enabled ? 30000 : false,
+  });
+}
