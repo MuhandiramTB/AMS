@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useAssignShift, useCreateShift, useShifts, type CreateShiftInput } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { AsyncView, Button, StatusPill } from '../components/ui';
+import { AsyncView, Button, Card, Field, Input, PageHeader, Select, StatusPill, TableWrap, Td, Th } from '../components/ui';
 
 export function ShiftsPage() {
   const { hasPermission } = useAuth();
@@ -13,9 +13,13 @@ export function ShiftsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold text-slate-800">Shifts</h1>
+      <PageHeader title="Shifts" subtitle="Define shift windows and assign them to employees or departments." />
 
-      {message && <p className="mb-4 rounded bg-slate-100 px-3 py-2 text-sm text-slate-700" role="status">{message}</p>}
+      {message && (
+        <p className="mb-6 rounded-[var(--radius-md)] bg-[var(--color-surface-2)] px-4 py-3 text-sm text-[var(--color-ink-soft)]" role="status">
+          {message}
+        </p>
+      )}
 
       {canWrite && (
         <div className="mb-6 grid gap-6 lg:grid-cols-2">
@@ -30,30 +34,34 @@ export function ShiftsPage() {
         isEmpty={shifts.data?.length === 0}
         emptyText="No shifts defined yet."
       >
-        <table className="w-full border-collapse text-left text-sm">
+        <TableWrap>
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
-              <th scope="col" className="py-2">Code</th><th scope="col" className="py-2">Name</th><th scope="col" className="py-2">Window</th>
-              <th scope="col" className="py-2">Break</th><th scope="col" className="py-2">Grace</th><th scope="col" className="py-2">Type</th>
+            <tr>
+              <Th>Code</Th>
+              <Th>Name</Th>
+              <Th>Window</Th>
+              <Th>Break</Th>
+              <Th>Grace</Th>
+              <Th>Type</Th>
             </tr>
           </thead>
           <tbody>
             {shifts.data?.map((s) => (
-              <tr key={s.id} className="border-b border-slate-100">
-                <td className="py-2 font-mono">{s.code}</td>
-                <td className="py-2">{s.name}</td>
-                <td className="py-2">{s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}</td>
-                <td className="py-2">{s.breakMinutes}m</td>
-                <td className="py-2">{s.graceInMinutes}/{s.graceOutMinutes}m</td>
-                <td className="py-2">
+              <tr key={s.id} className="border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)]">
+                <Td><span className="font-mono font-semibold text-[var(--color-ink)]">{s.code}</span></Td>
+                <Td>{s.name}</Td>
+                <Td className="tabular">{s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}</Td>
+                <Td>{s.breakMinutes}m</Td>
+                <Td>{s.graceInMinutes}/{s.graceOutMinutes}m</Td>
+                <Td>
                   {s.isOvernight
                     ? <StatusPill tone="info" label="Overnight" />
                     : <StatusPill tone="neutral" label="Day" />}
-                </td>
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </TableWrap>
       </AsyncView>
     </div>
   );
@@ -86,24 +94,42 @@ function CreateShiftForm({ onDone }: { onDone: (m: string) => void }) {
   });
 
   return (
-    <form onSubmit={onSubmit} className="rounded border border-slate-200 p-4">
-      <h2 className="mb-3 font-medium text-slate-800">New shift</h2>
-      <p className="mb-2 text-xs text-slate-500">Set end earlier than start for an overnight shift.</p>
-      <div className="grid grid-cols-2 gap-2">
-        <input aria-label="Shift code" placeholder="Code" className="rounded border border-slate-300 px-2 py-1" {...register('code', { required: true })} />
-        <input aria-label="Shift name" placeholder="Name" className="rounded border border-slate-300 px-2 py-1" {...register('name', { required: true })} />
-        <label className="text-xs text-slate-600">Start<input type="time" className="w-full rounded border border-slate-300 px-2 py-1" {...register('startTime', { required: true })} /></label>
-        <label className="text-xs text-slate-600">End<input type="time" className="w-full rounded border border-slate-300 px-2 py-1" {...register('endTime', { required: true })} /></label>
-        <label className="text-xs text-slate-600">Break (m)<input type="number" className="w-full rounded border border-slate-300 px-2 py-1" {...register('breakMinutes')} /></label>
-        <label className="text-xs text-slate-600">OT threshold (m)<input type="number" className="w-full rounded border border-slate-300 px-2 py-1" {...register('overtimeThresholdMinutes')} /></label>
-        <label className="text-xs text-slate-600">Grace in (m)<input type="number" className="w-full rounded border border-slate-300 px-2 py-1" {...register('graceInMinutes')} /></label>
-        <label className="text-xs text-slate-600">Grace out (m)<input type="number" className="w-full rounded border border-slate-300 px-2 py-1" {...register('graceOutMinutes')} /></label>
-      </div>
-      <div className="mt-3">
-        <Button type="submit" variant="primary" disabled={create.isPending}>Create shift</Button>
-        {err && <span role="alert" className="ml-2 text-sm text-red-600">{err}</span>}
-      </div>
-    </form>
+    <Card>
+      <form onSubmit={onSubmit}>
+        <h2 className="text-base font-semibold text-[var(--color-ink)]">New shift</h2>
+        <p className="mt-1 mb-4 text-xs text-[var(--color-muted)]">Set end earlier than start for an overnight shift.</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field id="shift-code" label="Code">
+            <Input id="shift-code" aria-label="Shift code" placeholder="Code" {...register('code', { required: true })} />
+          </Field>
+          <Field id="shift-name" label="Name">
+            <Input id="shift-name" aria-label="Shift name" placeholder="Name" {...register('name', { required: true })} />
+          </Field>
+          <Field id="shift-start" label="Start">
+            <Input id="shift-start" type="time" {...register('startTime', { required: true })} />
+          </Field>
+          <Field id="shift-end" label="End">
+            <Input id="shift-end" type="time" {...register('endTime', { required: true })} />
+          </Field>
+          <Field id="shift-break" label="Break (m)">
+            <Input id="shift-break" type="number" {...register('breakMinutes')} />
+          </Field>
+          <Field id="shift-ot" label="OT threshold (m)">
+            <Input id="shift-ot" type="number" {...register('overtimeThresholdMinutes')} />
+          </Field>
+          <Field id="shift-grace-in" label="Grace in (m)">
+            <Input id="shift-grace-in" type="number" {...register('graceInMinutes')} />
+          </Field>
+          <Field id="shift-grace-out" label="Grace out (m)">
+            <Input id="shift-grace-out" type="number" {...register('graceOutMinutes')} />
+          </Field>
+        </div>
+        <div className="mt-5 flex items-center gap-3">
+          <Button type="submit" variant="primary" loading={create.isPending} disabled={create.isPending}>Create shift</Button>
+          {err && <span role="alert" className="text-sm font-medium text-[var(--color-absent)]">{err}</span>}
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -138,24 +164,40 @@ function AssignShiftForm({ onDone }: { onDone: (m: string) => void }) {
   });
 
   return (
-    <form onSubmit={onSubmit} className="rounded border border-slate-200 p-4">
-      <h2 className="mb-3 font-medium text-slate-800">Assign shift (effective-dated)</h2>
-      <div className="grid grid-cols-2 gap-2">
-        <select aria-label="Shift" className="rounded border border-slate-300 px-2 py-1" {...register('shiftId', { required: true })}>
-          <option value="">Shift…</option>
-          {shifts.data?.map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
-        </select>
-        <select aria-label="Assign to" className="rounded border border-slate-300 px-2 py-1" {...register('target')}>
-          <option value="employee">Employee</option>
-          <option value="department">Department</option>
-        </select>
-        <input aria-label={target === 'employee' ? 'Employee ID' : 'Department ID'} placeholder={target === 'employee' ? 'Employee ID' : 'Department ID'} type="number" className="rounded border border-slate-300 px-2 py-1" {...register('targetId', { required: true })} />
-        <label className="text-xs text-slate-600">Effective from<input type="date" className="w-full rounded border border-slate-300 px-2 py-1" {...register('effectiveFrom', { required: true })} /></label>
-      </div>
-      <div className="mt-3">
-        <Button type="submit" variant="primary" disabled={assign.isPending}>Assign</Button>
-        {err && <span role="alert" className="ml-2 text-sm text-red-600">{err}</span>}
-      </div>
-    </form>
+    <Card>
+      <form onSubmit={onSubmit}>
+        <h2 className="mb-4 text-base font-semibold text-[var(--color-ink)]">Assign shift (effective-dated)</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field id="assign-shift" label="Shift">
+            <Select id="assign-shift" aria-label="Shift" {...register('shiftId', { required: true })}>
+              <option value="">Shift…</option>
+              {shifts.data?.map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
+            </Select>
+          </Field>
+          <Field id="assign-target" label="Assign to">
+            <Select id="assign-target" aria-label="Assign to" {...register('target')}>
+              <option value="employee">Employee</option>
+              <option value="department">Department</option>
+            </Select>
+          </Field>
+          <Field id="assign-target-id" label={target === 'employee' ? 'Employee ID' : 'Department ID'}>
+            <Input
+              id="assign-target-id"
+              aria-label={target === 'employee' ? 'Employee ID' : 'Department ID'}
+              placeholder={target === 'employee' ? 'Employee ID' : 'Department ID'}
+              type="number"
+              {...register('targetId', { required: true })}
+            />
+          </Field>
+          <Field id="assign-effective" label="Effective from">
+            <Input id="assign-effective" type="date" {...register('effectiveFrom', { required: true })} />
+          </Field>
+        </div>
+        <div className="mt-5 flex items-center gap-3">
+          <Button type="submit" variant="primary" loading={assign.isPending} disabled={assign.isPending}>Assign</Button>
+          {err && <span role="alert" className="text-sm font-medium text-[var(--color-absent)]">{err}</span>}
+        </div>
+      </form>
+    </Card>
   );
 }

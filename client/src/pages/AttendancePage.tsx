@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useAttendanceRecords, useCorrectAttendance } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { AsyncView, Button, StatusPill } from '../components/ui';
+import { AsyncView, Button, Card, Field, PageHeader, StatusPill, TableWrap, Td, Textarea, Th } from '../components/ui';
 import type { AttendanceRecord } from '../api/types';
 
 function statusPill(status: string) {
@@ -42,20 +42,24 @@ export function AttendancePage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold text-slate-800">Attendance</h1>
+      <PageHeader
+        title="Attendance"
+        subtitle="Daily attendance records, exceptions, and corrections."
+      />
 
-      <div className="mb-4 flex items-end gap-2">
-        <div>
-          <label className="block text-sm text-slate-600" htmlFor="empFilter">Employee ID</label>
-          <input
-            id="empFilter"
-            className="rounded border border-slate-300 px-2 py-1"
-            value={employeeId}
-            onChange={(e) => { setEmployeeId(e.target.value); setPage(1); }}
-            placeholder="all"
-          />
+      <Card className="mb-5" pad>
+        <div className="flex flex-wrap items-end gap-4">
+          <Field id="empFilter" label="Employee ID" className="w-48" hint="Leave blank for all">
+            <input
+              id="empFilter"
+              className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-muted-soft)] transition-colors focus:border-[var(--color-brand-600)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-600)]/20"
+              value={employeeId}
+              onChange={(e) => { setEmployeeId(e.target.value); setPage(1); }}
+              placeholder="all"
+            />
+          </Field>
         </div>
-      </div>
+      </Card>
 
       <AsyncView
         isLoading={records.isLoading}
@@ -63,39 +67,44 @@ export function AttendancePage() {
         isEmpty={records.data?.items.length === 0}
         emptyText="No attendance records for this filter."
       >
-        <table className={`w-full border-collapse text-left text-sm ${records.isPlaceholderData ? 'opacity-60' : ''}`}>
+        <TableWrap className={records.isPlaceholderData ? 'opacity-60' : ''}>
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
-              <th scope="col" className="py-2">Emp</th><th scope="col" className="py-2">Date</th><th scope="col" className="py-2">In</th>
-              <th scope="col" className="py-2">Out</th><th scope="col" className="py-2">Worked</th><th scope="col" className="py-2">Late</th>
-              <th scope="col" className="py-2">OT</th><th scope="col" className="py-2">Status</th>
-              <th scope="col" className="py-2"><span className="sr-only">Actions</span></th>
+            <tr>
+              <Th>Emp</Th>
+              <Th>Date</Th>
+              <Th>In</Th>
+              <Th>Out</Th>
+              <Th>Worked</Th>
+              <Th num>Late</Th>
+              <Th num>OT</Th>
+              <Th>Status</Th>
+              <Th><span className="sr-only">Actions</span></Th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-[var(--color-line-soft)]">
             {records.data?.items.map((r) => (
-              <tr key={r.id} className="border-b border-slate-100">
-                <td className="py-2">{r.employeeId}</td>
-                <td className="py-2">{r.workDate}</td>
-                <td className="py-2">{fmt(r.firstInUtc)}</td>
-                <td className="py-2">{fmt(r.lastOutUtc)}</td>
-                <td className="py-2">{mins(r.workedMinutes)}</td>
-                <td className="py-2">{r.lateMinutes ? `${r.lateMinutes}m` : '—'}</td>
-                <td className="py-2">{r.overtimeMinutes ? `${r.overtimeMinutes}m` : '—'}</td>
-                <td className="py-2">{statusPill(r.status)}</td>
-                <td className="py-2">
-                  {canCorrect && <Button onClick={() => setEditing(r)}>Review</Button>}
-                </td>
+              <tr key={r.id} className="transition-colors hover:bg-[var(--color-surface-2)]">
+                <Td>{r.employeeId}</Td>
+                <Td>{r.workDate}</Td>
+                <Td>{fmt(r.firstInUtc)}</Td>
+                <Td>{fmt(r.lastOutUtc)}</Td>
+                <Td>{mins(r.workedMinutes)}</Td>
+                <Td num>{r.lateMinutes ? `${r.lateMinutes}m` : '—'}</Td>
+                <Td num>{r.overtimeMinutes ? `${r.overtimeMinutes}m` : '—'}</Td>
+                <Td>{statusPill(r.status)}</Td>
+                <Td className="text-right">
+                  {canCorrect && <Button size="sm" onClick={() => setEditing(r)}>Review</Button>}
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </TableWrap>
       </AsyncView>
 
       {records.data && (
         <div className="mt-4 flex items-center gap-3 text-sm">
           <Button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-          <span className="text-slate-500">Page {records.data.page} of {records.data.totalPages || 1}</span>
+          <span className="text-[var(--color-muted)]">Page {records.data.page} of {records.data.totalPages || 1}</span>
           <Button disabled={page >= records.data.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
         </div>
       )}
@@ -196,57 +205,74 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
       role="dialog"
       aria-modal="true"
       aria-labelledby="corr-title"
-      className="fixed inset-y-0 right-0 z-10 w-full max-w-md overflow-auto border-l border-slate-200 bg-white p-6 shadow-xl"
+      className="fixed inset-y-0 right-0 z-10 flex w-full max-w-md flex-col overflow-auto border-l border-[var(--color-line)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-pop)]"
     >
-      <div className="mb-4 flex items-center justify-between">
-        <h2 id="corr-title" className="text-lg font-semibold text-slate-800">
-          Record — Emp {record.employeeId}, {record.workDate}
-        </h2>
-        <button ref={closeRef} onClick={onClose} className="text-slate-400 hover:text-slate-700" aria-label="Close">✕</button>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">Correction</p>
+          <h2 id="corr-title" className="mt-0.5 text-lg font-bold tracking-tight text-[var(--color-ink)]">
+            Record — Emp {record.employeeId}, {record.workDate}
+          </h2>
+        </div>
+        <button
+          ref={closeRef}
+          onClick={onClose}
+          className="rounded-[var(--radius-md)] p-1 text-[var(--color-muted-soft)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-ink)]"
+          aria-label="Close"
+        >
+          ✕
+        </button>
       </div>
 
-      <div className="mb-4 rounded bg-slate-50 p-3 text-sm">
-        <div className="mb-1 font-medium text-slate-600">Computed</div>
-        <div>Worked: {mins(record.workedMinutes)} · Late: {record.lateMinutes}m · OT: {record.overtimeMinutes}m</div>
-        <div className="mt-1">{statusPill(record.status)}</div>
+      <div className="mb-5 rounded-[var(--radius-md)] border border-[var(--color-line-soft)] bg-[var(--color-surface-2)] p-4 text-sm">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">Computed</div>
+        <div className="text-[var(--color-ink-soft)]">Worked: {mins(record.workedMinutes)} · Late: {record.lateMinutes}m · OT: {record.overtimeMinutes}m</div>
+        <div className="mt-2">{statusPill(record.status)}</div>
         {record.exceptions.length > 0 && (
-          <ul className="mt-2 list-disc pl-5 text-amber-700">
+          <ul className="mt-2 list-disc pl-5 text-[var(--color-late)]">
             {record.exceptions.map((ex) => <li key={ex.id}>{ex.type}{ex.isResolved ? ' (resolved)' : ''}</li>)}
           </ul>
         )}
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-3">
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Field id="firstIn" label="First in">
+          <input
+            id="firstIn"
+            type="datetime-local"
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] transition-colors focus:border-[var(--color-brand-600)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-600)]/20"
+            {...register('firstInUtc')}
+          />
+        </Field>
+        <Field id="lastOut" label="Last out">
+          <input
+            id="lastOut"
+            type="datetime-local"
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] transition-colors focus:border-[var(--color-brand-600)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-600)]/20"
+            {...register('lastOutUtc')}
+          />
+        </Field>
         <div>
-          <label className="block text-sm text-slate-600" htmlFor="firstIn">First in</label>
-          <input id="firstIn" type="datetime-local" className="w-full rounded border border-slate-300 px-2 py-1" {...register('firstInUtc')} />
-        </div>
-        <div>
-          <label className="block text-sm text-slate-600" htmlFor="lastOut">Last out</label>
-          <input id="lastOut" type="datetime-local" className="w-full rounded border border-slate-300 px-2 py-1" {...register('lastOutUtc')} />
-        </div>
-        <div>
-          <label className="block text-sm text-slate-600" htmlFor="reason">Reason *</label>
-          <textarea
+          <label className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]" htmlFor="reason">Reason *</label>
+          <Textarea
             id="reason"
-            className="w-full rounded border border-slate-300 px-2 py-1"
             rows={3}
             {...register('reason', { required: 'A reason is required for every correction.' })}
           />
           {formState.errors.reason && (
-            <span role="alert" className="text-xs text-red-600">{formState.errors.reason.message}</span>
+            <span role="alert" className="mt-1 block text-xs font-medium text-[var(--color-danger)]">{formState.errors.reason.message}</span>
           )}
         </div>
 
-        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-absent-bg)] px-3 py-2 text-sm font-medium text-[var(--color-danger)]">{error}</p>}
 
-        <div className="flex gap-2">
-          <Button type="submit" variant="primary" disabled={correct.isPending}>
+        <div className="flex gap-2 pt-1">
+          <Button type="submit" variant="primary" loading={correct.isPending} disabled={correct.isPending}>
             {correct.isPending ? 'Saving…' : 'Save & recalculate'}
           </Button>
           <Button onClick={onClose}>Cancel</Button>
         </div>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-[var(--color-muted-soft)]">
           Raw device punches are immutable; corrections adjust the record only and are fully audited.
         </p>
       </form>

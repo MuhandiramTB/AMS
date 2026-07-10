@@ -12,7 +12,19 @@ import {
 } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { AsyncView, Button, StatusPill } from '../components/ui';
+import {
+  AsyncView,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  StatusPill,
+  TableWrap,
+  Td,
+  Th,
+} from '../components/ui';
 import type { LeaveRequest } from '../api/types';
 
 function statusPill(status: string) {
@@ -44,19 +56,35 @@ export function LeavePage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold text-slate-800">Leave</h1>
-      {message && <p className="mb-4 rounded bg-slate-100 px-3 py-2 text-sm text-slate-700" role="status">{message}</p>}
+      <PageHeader title="Leave" subtitle="Request time off and manage leave requests." />
+
+      {message && (
+        <p
+          className="mb-4 rounded-[var(--radius-md)] bg-[var(--color-surface-2)] px-4 py-3 text-sm text-[var(--color-ink-soft)]"
+          role="status"
+        >
+          {message}
+        </p>
+      )}
 
       {canRequest && <RequestLeaveForm onDone={setMessage} />}
 
-      <div className="mb-4 flex items-end gap-2">
-        <div>
-          <label className="block text-sm text-slate-600" htmlFor="empFilter">Filter by Employee ID</label>
-          <input id="empFilter" className="rounded border border-slate-300 px-2 py-1"
-                 value={employeeId} onChange={(e) => { setEmployeeId(e.target.value); setPage(1); }} placeholder="all" />
+      <Card className="mb-6" pad>
+        <div className="flex flex-wrap items-end gap-4">
+          <Field id="empFilter" label="Filter by Employee ID" className="w-48">
+            <Input
+              id="empFilter"
+              value={employeeId}
+              onChange={(e) => {
+                setEmployeeId(e.target.value);
+                setPage(1);
+              }}
+              placeholder="all"
+            />
+          </Field>
+          {employeeId && <BalancesPanel employeeId={Number(employeeId)} />}
         </div>
-        {employeeId && <BalancesPanel employeeId={Number(employeeId)} />}
-      </div>
+      </Card>
 
       <AsyncView
         isLoading={requests.isLoading}
@@ -64,11 +92,15 @@ export function LeavePage() {
         isEmpty={requests.data?.items.length === 0}
         emptyText="No leave requests for this filter."
       >
-        <table className="w-full border-collapse text-left text-sm">
+        <TableWrap>
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
-              <th scope="col" className="py-2">Emp</th><th scope="col" className="py-2">Type</th><th scope="col" className="py-2">Dates</th>
-              <th scope="col" className="py-2">Days</th><th scope="col" className="py-2">Status</th><th scope="col" className="py-2">Actions</th>
+            <tr>
+              <Th>Emp</Th>
+              <Th>Type</Th>
+              <Th>Dates</Th>
+              <Th num>Days</Th>
+              <Th>Status</Th>
+              <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -76,14 +108,20 @@ export function LeavePage() {
               <LeaveRow key={r.id} req={r} canApprove={canApprove} canRequest={canRequest} onMessage={setMessage} />
             ))}
           </tbody>
-        </table>
+        </TableWrap>
       </AsyncView>
 
       {requests.data && (
         <div className="mt-4 flex items-center gap-3 text-sm">
-          <Button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-          <span className="text-slate-500">Page {requests.data.page} of {requests.data.totalPages || 1}</span>
-          <Button disabled={page >= requests.data.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+          <Button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            Prev
+          </Button>
+          <span className="text-[var(--color-muted)]">
+            Page {requests.data.page} of {requests.data.totalPages || 1}
+          </span>
+          <Button disabled={page >= requests.data.totalPages} onClick={() => setPage((p) => p + 1)}>
+            Next
+          </Button>
         </div>
       )}
     </div>
@@ -91,40 +129,74 @@ export function LeavePage() {
 }
 
 function LeaveRow({
-  req, canApprove, canRequest, onMessage,
-}: { req: LeaveRequest; canApprove: boolean; canRequest: boolean; onMessage: (m: string) => void }) {
+  req,
+  canApprove,
+  canRequest,
+  onMessage,
+}: {
+  req: LeaveRequest;
+  canApprove: boolean;
+  canRequest: boolean;
+  onMessage: (m: string) => void;
+}) {
   const approve = useApproveLeave();
   const reject = useRejectLeave();
   const cancel = useCancelLeave();
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
-    try { await fn(); onMessage(ok); }
-    catch (e) { onMessage(e instanceof ApiError ? e.message : 'Action failed.'); }
+    try {
+      await fn();
+      onMessage(ok);
+    } catch (e) {
+      onMessage(e instanceof ApiError ? e.message : 'Action failed.');
+    }
   };
 
   const pending = req.status === 'Submitted';
   const active = req.status === 'Submitted' || req.status === 'Approved' || req.status === 'Applied';
 
   return (
-    <tr className="border-b border-slate-100">
-      <td className="py-2">{req.employeeId}</td>
-      <td className="py-2">{req.leaveTypeId}</td>
-      <td className="py-2">{req.startDate} → {req.endDate}</td>
-      <td className="py-2">{req.dayCount}</td>
-      <td className="py-2">{statusPill(req.status)}</td>
-      <td className="py-2">
-        <div className="flex flex-wrap gap-1">
+    <tr className="border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)]">
+      <Td>{req.employeeId}</Td>
+      <Td>{req.leaveTypeId}</Td>
+      <Td>
+        {req.startDate} → {req.endDate}
+      </Td>
+      <Td num>{req.dayCount}</Td>
+      <Td>{statusPill(req.status)}</Td>
+      <Td>
+        <div className="flex flex-wrap gap-2">
           {canApprove && pending && (
             <>
-              <Button variant="primary" onClick={() => run(() => approve.mutateAsync(req.id), 'Leave approved.')}>Approve</Button>
-              <Button variant="danger" onClick={() => run(() => reject.mutateAsync(req.id), 'Leave rejected.')}>Reject</Button>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={approve.isPending}
+                onClick={() => run(() => approve.mutateAsync(req.id), 'Leave approved.')}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                loading={reject.isPending}
+                onClick={() => run(() => reject.mutateAsync(req.id), 'Leave rejected.')}
+              >
+                Reject
+              </Button>
             </>
           )}
           {canRequest && active && (
-            <Button onClick={() => run(() => cancel.mutateAsync(req.id), 'Leave cancelled.')}>Cancel</Button>
+            <Button
+              size="sm"
+              loading={cancel.isPending}
+              onClick={() => run(() => cancel.mutateAsync(req.id), 'Leave cancelled.')}
+            >
+              Cancel
+            </Button>
           )}
         </div>
-      </td>
+      </Td>
     </tr>
   );
 }
@@ -147,33 +219,45 @@ function RequestLeaveForm({ onDone }: { onDone: (m: string) => void }) {
   });
 
   return (
-    <form onSubmit={onSubmit} className="mb-6 flex flex-wrap items-end gap-2 rounded border border-slate-200 p-4">
-      <div>
-        <label className="block text-xs text-slate-600" htmlFor="lvEmp">Employee ID</label>
-        <input id="lvEmp" type="number" className="rounded border border-slate-300 px-2 py-1" {...register('employeeId', { required: true })} />
-      </div>
-      <div>
-        <label className="block text-xs text-slate-600" htmlFor="lvType">Type</label>
-        <select id="lvType" className="rounded border border-slate-300 px-2 py-1" {...register('leaveTypeId', { required: true })}>
-          <option value="">Type…</option>
-          {types.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-slate-600" htmlFor="lvFrom">From</label>
-        <input id="lvFrom" type="date" className="rounded border border-slate-300 px-2 py-1" {...register('startDate', { required: true })} />
-      </div>
-      <div>
-        <label className="block text-xs text-slate-600" htmlFor="lvTo">To</label>
-        <input id="lvTo" type="date" className="rounded border border-slate-300 px-2 py-1" {...register('endDate', { required: true })} />
-      </div>
-      <div>
-        <label className="block text-xs text-slate-600" htmlFor="lvReason">Reason</label>
-        <input id="lvReason" className="rounded border border-slate-300 px-2 py-1" {...register('reason')} />
-      </div>
-      <Button type="submit" variant="primary" disabled={request.isPending}>Request leave</Button>
-      {err && <span role="alert" className="text-sm text-red-600">{err}</span>}
-    </form>
+    <Card className="mb-6" pad>
+      <form onSubmit={onSubmit}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Field id="lvEmp" label="Employee ID">
+            <Input id="lvEmp" type="number" {...register('employeeId', { required: true })} />
+          </Field>
+          <Field id="lvType" label="Type">
+            <Select id="lvType" {...register('leaveTypeId', { required: true })}>
+              <option value="">Type…</option>
+              {types.data?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field id="lvFrom" label="From">
+            <Input id="lvFrom" type="date" {...register('startDate', { required: true })} />
+          </Field>
+          <Field id="lvTo" label="To">
+            <Input id="lvTo" type="date" {...register('endDate', { required: true })} />
+          </Field>
+          <Field id="lvReason" label="Reason">
+            <Input id="lvReason" {...register('reason')} />
+          </Field>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button type="submit" variant="primary" loading={request.isPending}>
+            Request leave
+          </Button>
+          {err && (
+            <span role="alert" className="text-sm font-medium text-[var(--color-danger)]">
+              {err}
+            </span>
+          )}
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -182,11 +266,11 @@ function BalancesPanel({ employeeId }: { employeeId: number }) {
   const balances = useLeaveBalances(employeeId, year);
   if (!balances.data || balances.data.length === 0) return null;
   return (
-    <div className="text-sm text-slate-600">
-      <span className="font-medium">Balances {year}:</span>{' '}
+    <div className="text-sm text-[var(--color-ink-soft)]">
+      <span className="font-semibold text-[var(--color-ink)]">Balances {year}:</span>{' '}
       {balances.data.map((b) => (
-        <span key={b.id} className="ml-2">
-          type {b.leaveTypeId}: <strong>{b.remainingDays}</strong>/{b.entitledDays}
+        <span key={b.id} className="ml-2 text-[var(--color-muted)]">
+          type {b.leaveTypeId}: <strong className="text-[var(--color-ink)]">{b.remainingDays}</strong>/{b.entitledDays}
         </span>
       ))}
     </div>

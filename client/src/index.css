@@ -1,13 +1,94 @@
 @import 'tailwindcss';
 
-/* Base app styling — enterprise, clean, data-dense (08 §1). */
+/* ===========================================================================
+   TAMS design system — semantic tokens (08 §6.1). Components consume these,
+   never raw hex, so status colour and theming stay consistent (DRY, themeable).
+   Modern-SaaS, enterprise-restrained visual language.
+   =========================================================================== */
+@theme {
+  /* Brand / primary */
+  --color-brand-50:  #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;   /* primary */
+  --color-brand-700: #4338ca;   /* primary hover */
+  --color-brand-800: #3730a3;
+
+  /* Cool-biased neutrals (chosen, not default grey) */
+  --color-surface:      #ffffff;
+  --color-surface-2:    #f7f8fb;   /* app background */
+  --color-surface-3:    #eef1f6;   /* subtle fills */
+  --color-ink:          #0f172a;   /* headings */
+  --color-ink-soft:     #334155;   /* body */
+  --color-muted:        #64748b;   /* secondary text */
+  --color-muted-soft:   #94a3b8;   /* tertiary / icons */
+  --color-line:         #e5e8ef;   /* borders */
+  --color-line-soft:    #eef1f6;
+
+  /* Semantic status language (08 §6.1) */
+  --color-present:     #059669;  --color-present-bg:   #ecfdf5;
+  --color-late:        #d97706;  --color-late-bg:      #fffbeb;
+  --color-absent:      #e11d48;  --color-absent-bg:    #fff1f2;
+  --color-leave:       #0284c7;  --color-leave-bg:     #f0f9ff;
+  --color-exception:   #d97706;  --color-exception-bg: #fffbeb;
+  --color-neutral-pill:#475569;  --color-neutral-bg:   #f1f5f9;
+
+  /* Feedback */
+  --color-success: #059669;
+  --color-danger:  #e11d48;
+  --color-warning: #d97706;
+
+  /* Radius + elevation (enterprise-restrained) */
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-raised: 0 4px 6px -2px rgb(15 23 42 / 0.05), 0 12px 24px -8px rgb(15 23 42 / 0.12);
+  --shadow-pop: 0 10px 30px -10px rgb(15 23 42 / 0.25);
+
+  /* Type */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
 html,
 body,
-#root {
-  height: 100%;
-}
+#root { height: 100%; }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
+  background: var(--color-surface-2);
+  color: var(--color-ink-soft);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Numeric columns line up */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Consistent, visible keyboard focus everywhere (a11y, P6) */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Subtle entrance used by cards/rows (kept tasteful) */
+@keyframes tams-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.animate-rise { animation: tams-rise 0.35s ease both; }
+
+/* Shimmer for skeletons */
+@keyframes tams-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.skeleton {
+  background: linear-gradient(90deg, var(--color-surface-3) 25%, #e2e8f0 37%, var(--color-surface-3) 63%);
+  background-size: 200% 100%;
+  animation: tams-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
 }
