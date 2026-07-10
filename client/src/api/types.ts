@@ -143,6 +143,36 @@ export interface TestConnectionResult {
   message: string | null;
 }
 
+// --- Leave (P4) ---
+export interface LeaveType {
+  id: number;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface LeaveRequest {
+  id: number;
+  employeeId: number;
+  leaveTypeId: number;
+  startDate: string;
+  endDate: string;
+  dayCount: number;
+  status: string;
+  approverUserId: number | null;
+  reason: string | null;
+}
+
+export interface LeaveBalance {
+  id: number;
+  employeeId: number;
+  leaveTypeId: number;
+  year: number;
+  entitledDays: number;
+  usedDays: number;
+  remainingDays: number;
+}
+
 /** RFC 9457 problem details shape (05 §6). */
 export interface ProblemDetails {
   type?: string;

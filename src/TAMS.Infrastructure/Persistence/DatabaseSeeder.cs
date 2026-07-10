@@ -60,24 +60,28 @@ public sealed class DatabaseSeeder
                 Permissions.ShiftRead, Permissions.ShiftWrite,
                 Permissions.AttendanceRead, Permissions.AttendanceReadAll,
                 Permissions.AttendanceWrite, Permissions.AttendanceCorrect,
-                Permissions.DeviceRead
+                Permissions.DeviceRead,
+                Permissions.LeaveRead, Permissions.LeaveRequest, Permissions.LeaveApprove, Permissions.LeaveManage
             },
             // Manager: read capability but NOT the all-rows scope — confined to own
             // records now; the team tier lands with Manager features (06 §5 seam).
             [RoleNames.Manager] = new[]
             {
                 Permissions.EmployeeRead, Permissions.DepartmentRead,
-                Permissions.ShiftRead, Permissions.AttendanceRead
+                Permissions.ShiftRead, Permissions.AttendanceRead,
+                Permissions.LeaveRead, Permissions.LeaveApprove
             },
             [RoleNames.Employee] = new[]
             {
-                Permissions.AttendanceRead
+                Permissions.AttendanceRead,
+                Permissions.LeaveRead, Permissions.LeaveRequest
             },
             [RoleNames.Auditor] = new[]
             {
                 Permissions.EmployeeRead, Permissions.EmployeeReadAll,
                 Permissions.DepartmentRead, Permissions.ShiftRead,
-                Permissions.AttendanceRead, Permissions.AttendanceReadAll, Permissions.AuditRead
+                Permissions.AttendanceRead, Permissions.AttendanceReadAll,
+                Permissions.LeaveRead, Permissions.AuditRead
             }
         };
 

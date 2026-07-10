@@ -7,6 +7,9 @@ import type {
   DeviceSyncState,
   Employee,
   Enrollment,
+  LeaveBalance,
+  LeaveRequest,
+  LeaveType,
   PagedResult,
   ReconcileResult,
   Shift,
@@ -273,3 +276,80 @@ export function useEnrollEmployee() {
       qc.invalidateQueries({ queryKey: ['device-enrollments', vars.deviceId] }),
   });
 }
+
+// --- Leave (P4) ---
+export function useLeaveTypes() {
+  return useQuery({
+    queryKey: ['leave-types'],
+    queryFn: async () => (await apiClient.get<LeaveType[]>('/leave/types')).data,
+  });
+}
+
+export function useLeaveBalances(employeeId: number | null, year: number) {
+  return useQuery({
+    queryKey: ['leave-balances', employeeId, year],
+    enabled: employeeId !== null,
+    queryFn: async () =>
+      (await apiClient.get<LeaveBalance[]>('/leave/balances', { params: { employeeId, year } })).data,
+  });
+}
+
+export function useLeaveRequests(
+  page: number,
+  pageSize: number,
+  filters: { employeeId?: number; status?: string } = {},
+) {
+  return useQuery({
+    queryKey: ['leave-requests', page, pageSize, filters],
+    queryFn: async () =>
+      (await apiClient.get<PagedResult<LeaveRequest>>('/leave/requests', {
+        params: { page, pageSize, ...filters },
+      })).data,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export interface RequestLeaveInput {
+  employeeId: number;
+  leaveTypeId: number;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+}
+
+export function useRequestLeave() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RequestLeaveInput) => {
+      try {
+        return (await apiClient.post<LeaveRequest>('/leave/requests', input)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leave-requests'] }),
+  });
+}
+
+/** Leave decision hook factory (approve/reject/cancel), invalidating requests + balances. */
+function useLeaveDecision(path: (id: number) => string, body?: () => unknown) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      try {
+        return (await apiClient.post<LeaveRequest>(path(id), body ? body() : {})).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leave-requests'] });
+      qc.invalidateQueries({ queryKey: ['leave-balances'] });
+    },
+  });
+}
+
+export const useApproveLeave = () =>
+  useLeaveDecision((id) => `/leave/requests/${id}/approve`, () => ({ allowOverride: false }));
+export const useRejectLeave = () => useLeaveDecision((id) => `/leave/requests/${id}/reject`);
+export const useCancelLeave = () => useLeaveDecision((id) => `/leave/requests/${id}/cancel`);

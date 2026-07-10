@@ -11,6 +11,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { label: 'Dashboard', to: '/' },
   { label: 'Attendance', to: '/attendance', permission: 'Attendance.Read' },
+  { label: 'Leave', to: '/leave', permission: 'Leave.Read' },
   { label: 'Shifts', to: '/shifts', permission: 'Shift.Read' },
   { label: 'Employees', to: '/employees', permission: 'Employee.Read' },
   { label: 'Departments', to: '/departments', permission: 'Department.Read' },

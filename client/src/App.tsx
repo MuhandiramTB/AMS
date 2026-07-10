@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { DepartmentsPage } from './pages/DepartmentsPage';
 import { DevicesPage } from './pages/DevicesPage';
 import { EmployeesPage } from './pages/EmployeesPage';
+import { LeavePage } from './pages/LeavePage';
 import { LoginPage } from './pages/LoginPage';
 import { ShiftsPage } from './pages/ShiftsPage';
 
@@ -34,6 +35,7 @@ function AuthenticatedApp() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/leave" element={<LeavePage />} />
         <Route path="/shifts" element={<ShiftsPage />} />
         <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/departments" element={<DepartmentsPage />} />

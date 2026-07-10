@@ -40,10 +40,10 @@ describe('AppShell role-filtered navigation (08 §3, 06 §5)', () => {
   it('shows the full nav for an administrator', () => {
     renderShellAs({
       id: 2, userName: 'admin', roles: ['Administrator'],
-      permissions: ['Employee.Read', 'Department.Read', 'Shift.Read', 'Attendance.Read', 'Device.Read'],
+      permissions: ['Employee.Read', 'Department.Read', 'Shift.Read', 'Attendance.Read', 'Device.Read', 'Leave.Read'],
     });
 
-    for (const label of ['Dashboard', 'Attendance', 'Shifts', 'Employees', 'Departments', 'Devices']) {
+    for (const label of ['Dashboard', 'Attendance', 'Leave', 'Shifts', 'Employees', 'Departments', 'Devices']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
     }
   });
