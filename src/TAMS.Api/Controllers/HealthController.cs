@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TAMS.Infrastructure.Persistence;
 
 namespace TAMS.Api.Controllers;
@@ -8,6 +9,7 @@ namespace TAMS.Api.Controllers;
 [ApiController]
 [Route("api/v1/health")]
 [AllowAnonymous]
+[DisableRateLimiting] // monitoring probes must not be throttled
 public sealed class HealthController : ControllerBase
 {
     /// <summary>GET /api/v1/health/live — process is up.</summary>

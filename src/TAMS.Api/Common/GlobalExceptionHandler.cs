@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TAMS.Application.Common.Exceptions;
 using TAMS.Application.Common.Ports;
 using ApplicationException = TAMS.Application.Common.Exceptions.ApplicationException;
@@ -106,6 +107,18 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             case ApplicationException:
                 return (StatusCodes.Status400BadRequest, "Request error.",
                     "https://tams/errors/bad-request", null);
+
+            // Safety net: a lost-update (RowVersion mismatch) that a handler did
+            // not translate still surfaces as 409, never an opaque 500. (05 §8.)
+            case DbUpdateConcurrencyException:
+                return (StatusCodes.Status409Conflict, "The record was modified by someone else. Reload and try again.",
+                    "https://tams/errors/concurrency", null);
+
+            // Safety net for uniqueness/constraint violations that slip past a
+            // handler pre-check (e.g. a race on a unique index). (05 §5.)
+            case DbUpdateException:
+                return (StatusCodes.Status409Conflict, "Resource conflict.",
+                    "https://tams/errors/conflict", null);
 
             default:
                 return (StatusCodes.Status500InternalServerError, "Internal server error.",

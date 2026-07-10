@@ -20,6 +20,9 @@ public sealed class JwtTokenService : ITokenService
     /// <summary>Custom claim type for permission codes.</summary>
     public const string PermissionClaimType = "perm";
 
+    /// <summary>Custom claim type for the linked employee id (data-scope). (06 §5.)</summary>
+    public const string EmployeeIdClaimType = "emp";
+
     private readonly JwtOptions _options;
     private readonly IClock _clock;
 
@@ -42,6 +45,10 @@ public sealed class JwtTokenService : ITokenService
         };
         claims.AddRange(user.Roles.Select(r => new Claim(ClaimTypes.Role, r.Name)));
         claims.AddRange(user.PermissionCodes.Select(p => new Claim(PermissionClaimType, p)));
+        if (user.EmployeeId is { } employeeId)
+        {
+            claims.Add(new Claim(EmployeeIdClaimType, employeeId.ToString()));
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

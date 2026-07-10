@@ -62,23 +62,63 @@ public sealed class AttendanceController : ApiControllerBase
     [ProducesResponseType(typeof(AttendanceRecordDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AttendanceRecordDto>> GetRecord(long id, CancellationToken cancellationToken)
-        => Ok(await Mediator.Send(new GetAttendanceRecordByIdQuery(id), cancellationToken));
+    {
+        var result = await Mediator.Send(new GetAttendanceRecordByIdQuery(id), cancellationToken);
+        SetETag(result.ConcurrencyToken);
+        return Ok(result);
+    }
 
-    /// <summary>Correct a record's in/out with a mandatory reason. (FR-ATT-006, BRULE-05.)</summary>
+    /// <summary>
+    /// Correct a record's in/out with a mandatory reason. Requires an If-Match
+    /// header carrying the record's ETag for optimistic concurrency.
+    /// (FR-ATT-006, BRULE-05, 05 §8.2/§10.5.)
+    /// </summary>
     [HttpPatch("records/{id:long}")]
     [HasPermission(Permissions.AttendanceCorrect)]
     [ProducesResponseType(typeof(AttendanceRecordDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<ActionResult<AttendanceRecordDto>> Correct(
         long id,
         [FromBody] CorrectRequest request,
         [FromServices] ICurrentUser currentUser,
         CancellationToken cancellationToken)
     {
+        // If-Match is mandatory so a correction can't silently clobber a concurrent
+        // edit. Absence → 428 Precondition Required. (05 §8.2.)
+        var ifMatch = ParseIfMatch();
+        if (ifMatch is null)
+        {
+            return StatusCode(StatusCodes.Status428PreconditionRequired,
+                new { detail = "An If-Match header with the record's ETag is required." });
+        }
+
         var actorId = currentUser.UserId ?? 0;
         var result = await Mediator.Send(new CorrectAttendanceCommand(
-            id, actorId, request.FirstInUtc, request.LastOutUtc, request.Reason), cancellationToken);
+            id, actorId, request.FirstInUtc, request.LastOutUtc, request.Reason, ifMatch), cancellationToken);
+        SetETag(result.ConcurrencyToken);
         return Ok(result);
+    }
+
+    private void SetETag(string concurrencyToken)
+    {
+        if (!string.IsNullOrEmpty(concurrencyToken))
+        {
+            Response.Headers.ETag = $"\"{concurrencyToken}\"";
+        }
+    }
+
+    /// <summary>Extracts the (quoted) ETag value from the If-Match header, if present.</summary>
+    private string? ParseIfMatch()
+    {
+        var raw = Request.Headers.IfMatch.ToString();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        return raw.Trim().Trim('"');
     }
 }

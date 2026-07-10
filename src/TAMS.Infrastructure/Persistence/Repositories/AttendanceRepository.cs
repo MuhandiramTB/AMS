@@ -12,7 +12,7 @@ public sealed class AttendanceRepository : IAttendanceRepository
 
     public async Task<bool> TryAddPunchAsync(PunchTransaction punch, CancellationToken cancellationToken = default)
     {
-        // Idempotent: if the key already exists, treat as a no-op. (FR-ATT-008.)
+        // Fast path: skip the insert if the key is already present.
         var exists = await _db.Punches.AnyAsync(p => p.IdempotencyKey == punch.IdempotencyKey, cancellationToken);
         if (exists)
         {
@@ -20,7 +20,29 @@ public sealed class AttendanceRepository : IAttendanceRepository
         }
 
         await _db.Punches.AddAsync(punch, cancellationToken);
-        return true;
+
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent request may have inserted the same punch between our
+            // check and save. The UQ_Punch_IdempotencyKey index is the real guard.
+            // Detach our failed insert and confirm the duplicate is now present;
+            // if so, treat as an idempotent no-op rather than a 500. (ADR-011, 04 §11.1.)
+            _db.Entry(punch).State = EntityState.Detached;
+
+            var nowExists = await _db.Punches.AsNoTracking()
+                .AnyAsync(p => p.IdempotencyKey == punch.IdempotencyKey, cancellationToken);
+            if (nowExists)
+            {
+                return false;
+            }
+
+            throw; // a different DB error — let it surface (mapped to 409 by G1 safety net)
+        }
     }
 
     public async Task<IReadOnlyList<PunchTransaction>> GetPunchesForDayAsync(
@@ -50,6 +72,9 @@ public sealed class AttendanceRepository : IAttendanceRepository
 
     public async Task AddRecordAsync(AttendanceRecord record, CancellationToken cancellationToken = default) =>
         await _db.AttendanceRecords.AddAsync(record, cancellationToken);
+
+    public void SetOriginalConcurrencyToken(AttendanceRecord record, byte[] expectedRowVersion) =>
+        _db.Entry(record).Property(r => r.RowVersion).OriginalValue = expectedRowVersion;
 
     public async Task<(IReadOnlyList<AttendanceRecord> Items, int TotalCount)> GetRecordsPagedAsync(
         int page, int pageSize, long? employeeId, DateOnly? fromDate, DateOnly? toDate,

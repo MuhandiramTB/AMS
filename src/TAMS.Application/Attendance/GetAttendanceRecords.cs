@@ -3,6 +3,8 @@ using MediatR;
 using TAMS.Application.Common.Exceptions;
 using TAMS.Application.Common.Models;
 using TAMS.Application.Common.Ports;
+using TAMS.Application.Common.Security;
+using TAMS.Domain.Identity;
 
 namespace TAMS.Application.Attendance;
 
@@ -40,14 +42,24 @@ public sealed class GetAttendanceRecordsHandler
     : IRequestHandler<GetAttendanceRecordsQuery, PagedResult<AttendanceRecordDto>>
 {
     private readonly IAttendanceRepository _attendance;
+    private readonly ICurrentUser _currentUser;
 
-    public GetAttendanceRecordsHandler(IAttendanceRepository attendance) => _attendance = attendance;
+    public GetAttendanceRecordsHandler(IAttendanceRepository attendance, ICurrentUser currentUser)
+    {
+        _attendance = attendance;
+        _currentUser = currentUser;
+    }
 
     public async Task<PagedResult<AttendanceRecordDto>> Handle(
         GetAttendanceRecordsQuery request, CancellationToken cancellationToken)
     {
+        // Server-derived scope: restricted callers may only see their own records,
+        // regardless of any employeeId they pass. (06 §5, OWASP A01.)
+        var scope = DataScope.For(_currentUser, Permissions.AttendanceReadAll);
+        var employeeFilter = scope.ResolveEmployeeFilter(request.EmployeeId);
+
         var (items, total) = await _attendance.GetRecordsPagedAsync(
-            request.Page, request.PageSize, request.EmployeeId, request.FromDate, request.ToDate, cancellationToken);
+            request.Page, request.PageSize, employeeFilter, request.FromDate, request.ToDate, cancellationToken);
 
         return new PagedResult<AttendanceRecordDto>(
             items.Select(AttendanceRecordDto.FromEntity).ToList(),

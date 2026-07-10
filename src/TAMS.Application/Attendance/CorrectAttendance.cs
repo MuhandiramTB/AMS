@@ -16,7 +16,10 @@ public sealed record CorrectAttendanceCommand(
     long ActorUserId,
     DateTime? FirstInUtc,
     DateTime? LastOutUtc,
-    string Reason) : IRequest<AttendanceRecordDto>;
+    string Reason,
+    // Base64 RowVersion from the client's If-Match header. Required for optimistic
+    // concurrency: a stale token yields a 409. (05 §8.2, FR-ATT-006.)
+    string? ExpectedConcurrencyToken) : IRequest<AttendanceRecordDto>;
 
 public sealed class CorrectAttendanceValidator : AbstractValidator<CorrectAttendanceCommand>
 {
@@ -53,6 +56,23 @@ public sealed class CorrectAttendanceHandler : IRequestHandler<CorrectAttendance
     {
         var record = await _attendance.GetRecordByIdAsync(request.RecordId, cancellationToken)
             ?? throw new NotFoundException("AttendanceRecord", request.RecordId);
+
+        // Optimistic concurrency: enforce the client's If-Match token so a stale
+        // edit fails with 409 rather than silently overwriting. (05 §8.2, FR-ATT-006.)
+        if (!string.IsNullOrEmpty(request.ExpectedConcurrencyToken))
+        {
+            byte[] expected;
+            try
+            {
+                expected = Convert.FromBase64String(request.ExpectedConcurrencyToken);
+            }
+            catch (FormatException)
+            {
+                throw new BusinessRuleException("Malformed concurrency token.");
+            }
+
+            _attendance.SetOriginalConcurrencyToken(record, expected);
+        }
 
         var now = _clock.UtcNow;
 

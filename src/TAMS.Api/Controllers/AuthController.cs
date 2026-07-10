@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TAMS.Application.Auth;
 using TAMS.Application.Common.Ports;
 
 namespace TAMS.Api.Controllers;
 
 /// <summary>Authentication endpoints. (05 §4.2, FR-AUTH-*.)</summary>
+[EnableRateLimiting("auth")]
 public sealed class AuthController : ApiControllerBase
 {
     /// <summary>Name of the HttpOnly cookie holding the refresh token (06 §6).</summary>

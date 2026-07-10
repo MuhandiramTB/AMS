@@ -55,21 +55,28 @@ public sealed class DatabaseSeeder
             [RoleNames.Administrator] = Permissions.All.ToArray(),
             [RoleNames.HrOfficer] = new[]
             {
-                Permissions.EmployeeRead, Permissions.EmployeeWrite,
+                Permissions.EmployeeRead, Permissions.EmployeeReadAll, Permissions.EmployeeWrite,
                 Permissions.DepartmentRead, Permissions.DepartmentWrite,
                 Permissions.ShiftRead, Permissions.ShiftWrite,
-                Permissions.AttendanceRead, Permissions.AttendanceWrite, Permissions.AttendanceCorrect
+                Permissions.AttendanceRead, Permissions.AttendanceReadAll,
+                Permissions.AttendanceWrite, Permissions.AttendanceCorrect
             },
+            // Manager: read capability but NOT the all-rows scope — confined to own
+            // records now; the team tier lands with Manager features (06 §5 seam).
             [RoleNames.Manager] = new[]
             {
                 Permissions.EmployeeRead, Permissions.DepartmentRead,
                 Permissions.ShiftRead, Permissions.AttendanceRead
             },
-            [RoleNames.Employee] = Array.Empty<string>(),
+            [RoleNames.Employee] = new[]
+            {
+                Permissions.AttendanceRead
+            },
             [RoleNames.Auditor] = new[]
             {
-                Permissions.EmployeeRead, Permissions.DepartmentRead,
-                Permissions.ShiftRead, Permissions.AttendanceRead, Permissions.AuditRead
+                Permissions.EmployeeRead, Permissions.EmployeeReadAll,
+                Permissions.DepartmentRead, Permissions.ShiftRead,
+                Permissions.AttendanceRead, Permissions.AttendanceReadAll, Permissions.AuditRead
             }
         };
 

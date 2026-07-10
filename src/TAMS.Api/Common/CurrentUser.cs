@@ -39,4 +39,16 @@ public sealed class CurrentUser : ICurrentUser
     public IReadOnlyCollection<string> Permissions =>
         Principal?.FindAll(JwtTokenService.PermissionClaimType).Select(c => c.Value).ToList()
         ?? new List<string>();
+
+    public long? EmployeeId
+    {
+        get
+        {
+            var value = Principal?.FindFirstValue(JwtTokenService.EmployeeIdClaimType);
+            return long.TryParse(value, out var id) ? id : null;
+        }
+    }
+
+    public bool HasPermission(string permission) =>
+        Principal?.HasClaim(JwtTokenService.PermissionClaimType, permission) ?? false;
 }

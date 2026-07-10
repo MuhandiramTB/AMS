@@ -14,4 +14,9 @@ public interface ICurrentUser
     bool IsAuthenticated { get; }
 
     IReadOnlyCollection<string> Permissions { get; }
+
+    /// <summary>The employee this user is linked to, if any (for own-record scoping).</summary>
+    long? EmployeeId { get; }
+
+    bool HasPermission(string permission);
 }

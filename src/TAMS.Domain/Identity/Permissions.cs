@@ -25,6 +25,11 @@ public static class Permissions
     public const string AttendanceWrite = "Attendance.Write";
     public const string AttendanceCorrect = "Attendance.Correct";
 
+    // Unrestricted (all-rows) read scope — held by Admin/HR/Auditor, NOT Manager/
+    // Employee, who are confined to their own records via server-derived scope. (06 §5.)
+    public const string EmployeeReadAll = "Employee.ReadAll";
+    public const string AttendanceReadAll = "Attendance.ReadAll";
+
     // Administration
     public const string UserManage = "User.Manage";
     public const string RoleManage = "Role.Manage";
@@ -43,6 +48,8 @@ public static class Permissions
         AttendanceRead,
         AttendanceWrite,
         AttendanceCorrect,
+        EmployeeReadAll,
+        AttendanceReadAll,
         UserManage,
         RoleManage,
         AuditRead

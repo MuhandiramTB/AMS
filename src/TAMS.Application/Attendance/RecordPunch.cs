@@ -33,13 +33,11 @@ public sealed class RecordPunchValidator : AbstractValidator<RecordPunchCommand>
 public sealed class RecordPunchHandler : IRequestHandler<RecordPunchCommand, bool>
 {
     private readonly IAttendanceRepository _attendance;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
-    public RecordPunchHandler(IAttendanceRepository attendance, IUnitOfWork unitOfWork, IClock clock)
+    public RecordPunchHandler(IAttendanceRepository attendance, IClock clock)
     {
         _attendance = attendance;
-        _unitOfWork = unitOfWork;
         _clock = clock;
     }
 
@@ -56,13 +54,9 @@ public sealed class RecordPunchHandler : IRequestHandler<RecordPunchCommand, boo
             key,
             _clock.UtcNow);
 
-        var added = await _attendance.TryAddPunchAsync(punch, cancellationToken);
-        if (added)
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        return added; // false ⇒ duplicate ignored (idempotent)
+        // TryAddPunchAsync persists atomically and is race-safe (see the port).
+        return await _attendance.TryAddPunchAsync(punch, cancellationToken);
+        // false ⇒ duplicate ignored (idempotent)
     }
 
     private static string BuildIdempotencyKey(RecordPunchCommand r)
