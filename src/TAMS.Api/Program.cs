@@ -81,8 +81,12 @@ builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy => poli
     .AllowCredentials()));
 
 // --- Rate limiting: strict per-IP on auth (brute-force defence), a generous
-//     global limiter elsewhere; both return 429. (06 §13, FR-AUTH-005.) ---
+//     global limiter elsewhere; both return 429. (06 §13, FR-AUTH-005.)
+//     Limits are configurable so non-prod (e.g. shared-IP test hosts) can relax
+//     them without weakening the production defaults. ---
 const string AuthRateLimit = "auth";
+var authPermitLimit = builder.Configuration.GetValue<int?>("RateLimit:AuthPerMinute") ?? 10;
+var globalPermitLimit = builder.Configuration.GetValue<int?>("RateLimit:GlobalPerMinute") ?? 300;
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -92,7 +96,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = authPermitLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -102,7 +106,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 300,
+                PermitLimit = globalPermitLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));

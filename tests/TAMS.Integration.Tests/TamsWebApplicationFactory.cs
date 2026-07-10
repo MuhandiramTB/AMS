@@ -40,6 +40,10 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
                 ["BootstrapAdmin:UserName"] = "admin",
                 ["BootstrapAdmin:Email"] = "admin@tams.local",
                 ["BootstrapAdmin:Password"] = "ChangeMe!123",
+                // All tests share one host IP; relax rate limits so the limiter
+                // (verified separately) doesn't throttle the suite. Prod keeps defaults.
+                ["RateLimit:AuthPerMinute"] = "100000",
+                ["RateLimit:GlobalPerMinute"] = "100000",
             });
         });
     }
@@ -72,13 +76,16 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
                 p.SourceType == TAMS.Domain.Attendance.PunchSource.Device));
     }
 
-    /// <summary>Counts punches now attributed to an employee (verifies orphan back-fill).</summary>
-    public async Task<int> CountResolvedPunchesAsync(long employeeId)
+    /// <summary>
+    /// Counts punches on a specific device now attributed to an employee (verifies
+    /// orphan back-fill). Device-scoped so parallel test data can't contaminate it.
+    /// </summary>
+    public async Task<int> CountResolvedPunchesAsync(long employeeId, long deviceId)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TamsDbContext>();
         return await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
-            db.Punches.Where(p => p.EmployeeId == employeeId));
+            db.Punches.Where(p => p.EmployeeId == employeeId && p.DeviceId == deviceId));
     }
 
     /// <summary>True if a processed attendance record exists for the employee/date.</summary>

@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using FluentAssertions;
 using TAMS.Application.Devices;
 
@@ -164,15 +163,15 @@ public sealed class DeviceResilienceTests
     {
         // HIGH fix: a punch captured before enrollment must not be orphaned — once
         // the employee is enrolled, the punch is resolved and processed. (FR-ZK-003.)
+        // Fully MediatR-direct (no HTTP login) to match the stable resilience-test
+        // pattern and avoid shared-host auth/rate-limit flakiness.
         var (id, serial) = await RegisterDeviceAsync("orphan");
 
-        // Set up an employee + department to enroll to.
-        var client = await AdminHttpClientAsync();
-        await client.PostAsJsonAsync("/api/v1/departments", new { code = $"DORPH{id}", name = "Orphan Dept" });
-        var deptId = await LastDeptIdAsync(client);
-        var empResp = await client.PostAsJsonAsync("/api/v1/employees",
-            new { employeeNo = $"ORPH{id}", firstName = "Ola", lastName = "Ph", primaryDepartmentId = deptId });
-        var empId = (await empResp.Content.ReadFromJsonAsync<IdResp>())!.id;
+        var dept = await _factory.SendAsync(new TAMS.Application.Departments.CreateDepartmentCommand(
+            $"DORPH{id}", "Orphan Dept", null));
+        var emp = await _factory.SendAsync(new TAMS.Application.Employees.CreateEmployeeCommand(
+            $"ORPH{id}", "Ola", "Ph", null, dept.Id, null));
+        var empId = emp.Id;
 
         // Punch arrives BEFORE enrollment → stored unresolved.
         _factory.Simulator.EmitPunch(serial, "orphan-user", new DateTime(2026, 7, 10, 9, 0, 0, DateTimeKind.Utc), 1);
@@ -181,34 +180,14 @@ public sealed class DeviceResilienceTests
         sync.Unresolved.Should().Be(2);
 
         // Before enrollment: the punches are stored but attributed to no one.
-        (await _factory.CountResolvedPunchesAsync(empId)).Should().Be(0);
+        (await _factory.CountResolvedPunchesAsync(empId, id)).Should().Be(0);
 
         // Now enroll → back-fill + reprocess.
         await _factory.SendAsync(new EnrollEmployeeCommand(empId, id, "orphan-user"));
 
         // The previously-orphaned punches are now attributed to the employee and a
         // processed attendance record exists — no captured punch was lost.
-        (await _factory.CountResolvedPunchesAsync(empId)).Should().Be(2);
+        (await _factory.CountResolvedPunchesAsync(empId, id)).Should().Be(2);
         (await _factory.HasAttendanceRecordAsync(empId)).Should().BeTrue();
     }
-
-    // --- helpers for the enrollment/backfill test (need the HTTP + query surface) ---
-    private async Task<System.Net.Http.HttpClient> AdminHttpClientAsync()
-    {
-        var client = _factory.CreateClient();
-        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { userName = "admin", password = "ChangeMe!123" });
-        var body = await login.Content.ReadFromJsonAsync<LoginResp>();
-        client.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", body!.accessToken);
-        return client;
-    }
-
-    private static async Task<long> LastDeptIdAsync(System.Net.Http.HttpClient client)
-    {
-        var depts = await client.GetFromJsonAsync<List<IdResp>>("/api/v1/departments");
-        return depts!.Last().id;
-    }
-
-    private sealed record LoginResp(string accessToken);
-    private sealed record IdResp(long id);
 }
