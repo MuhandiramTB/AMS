@@ -16,6 +16,9 @@ public sealed class EmployeeRepository : IEmployeeRepository
     public Task<bool> EmployeeNoExistsAsync(string employeeNo, CancellationToken cancellationToken = default) =>
         _db.Employees.AnyAsync(e => e.EmployeeNo == employeeNo, cancellationToken);
 
+    public Task<bool> ExistsAsync(long id, CancellationToken cancellationToken = default) =>
+        _db.Employees.AnyAsync(e => e.Id == id, cancellationToken);
+
     public async Task<(IReadOnlyList<Employee> Items, int TotalCount)> GetPagedAsync(
         int page,
         int pageSize,

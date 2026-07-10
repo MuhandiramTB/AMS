@@ -8,6 +8,8 @@ public interface ILeaveRepository
     // Types
     Task<LeaveType?> GetTypeByIdAsync(long id, CancellationToken cancellationToken = default);
     Task<bool> TypeCodeExistsAsync(string code, CancellationToken cancellationToken = default);
+    /// <summary>Existence check by id without materializing the entity (hot write paths).</summary>
+    Task<bool> TypeExistsAsync(long id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LeaveType>> GetTypesAsync(CancellationToken cancellationToken = default);
     Task AddTypeAsync(LeaveType type, CancellationToken cancellationToken = default);
 

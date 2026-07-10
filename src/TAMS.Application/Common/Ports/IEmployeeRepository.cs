@@ -12,6 +12,9 @@ public interface IEmployeeRepository
 
     Task<bool> EmployeeNoExistsAsync(string employeeNo, CancellationToken cancellationToken = default);
 
+    /// <summary>Existence check by id without materializing the entity (hot write paths).</summary>
+    Task<bool> ExistsAsync(long id, CancellationToken cancellationToken = default);
+
     Task<(IReadOnlyList<Employee> Items, int TotalCount)> GetPagedAsync(
         int page,
         int pageSize,

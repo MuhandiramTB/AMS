@@ -17,6 +17,9 @@ public sealed class LeaveRepository : ILeaveRepository
     public Task<bool> TypeCodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
         _db.LeaveTypes.AnyAsync(t => t.Code == code, cancellationToken);
 
+    public Task<bool> TypeExistsAsync(long id, CancellationToken cancellationToken = default) =>
+        _db.LeaveTypes.AnyAsync(t => t.Id == id, cancellationToken);
+
     public async Task<IReadOnlyList<LeaveType>> GetTypesAsync(CancellationToken cancellationToken = default) =>
         await _db.LeaveTypes.AsNoTracking().OrderBy(t => t.Code).ToListAsync(cancellationToken);
 

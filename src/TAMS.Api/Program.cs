@@ -59,7 +59,16 @@ builder.Services
     });
 
 // --- AuthZ: permission-based, deny-by-default (06 §5) ---
-builder.Services.AddAuthorization();
+// A fallback policy makes authentication mandatory for ANY endpoint that carries no
+// explicit authorization metadata, so a controller/action that forgets [HasPermission]
+// is denied by the framework rather than served anonymously. Endpoints that must stay
+// public (auth login/refresh, health probes) opt out with [AllowAnonymous]. (06 SP-04.)
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

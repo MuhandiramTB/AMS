@@ -58,12 +58,14 @@ public sealed class RequestLeaveHandler : IRequestHandler<RequestLeaveCommand, L
             }
         }
 
-        if (await _employees.GetByIdAsync(request.EmployeeId, cancellationToken) is null)
+        // Existence checks only — use AnyAsync so no tracked entity is materialized
+        // on this hot write path. (Perf hardening.)
+        if (!await _employees.ExistsAsync(request.EmployeeId, cancellationToken))
         {
             throw new BusinessRuleException($"Employee '{request.EmployeeId}' does not exist.");
         }
 
-        if (await _leave.GetTypeByIdAsync(request.LeaveTypeId, cancellationToken) is null)
+        if (!await _leave.TypeExistsAsync(request.LeaveTypeId, cancellationToken))
         {
             throw new BusinessRuleException($"Leave type '{request.LeaveTypeId}' does not exist.");
         }
