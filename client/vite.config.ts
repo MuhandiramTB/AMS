@@ -10,7 +10,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5080',
+        // Default to the local dev API; overridable for E2E (which runs the API
+        // on a separate port against a dedicated database).
+        target: process.env.VITE_E2E_API ?? 'http://localhost:5080',
         changeOrigin: true,
       },
     },
