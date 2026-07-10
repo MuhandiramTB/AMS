@@ -1,6 +1,18 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient, toApiError } from './client';
-import type { Department, Employee, PagedResult } from './types';
+import type {
+  AttendanceRecord,
+  Department,
+  Device,
+  DeviceSyncState,
+  Employee,
+  Enrollment,
+  PagedResult,
+  ReconcileResult,
+  Shift,
+  SyncDeviceResult,
+  TestConnectionResult,
+} from './types';
 
 // React Query owns all server state — caching, retries, invalidation (07 §9).
 
@@ -63,5 +75,201 @@ export function useCreateEmployee() {
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employees'] }),
+  });
+}
+
+// --- Shifts (P2) ---
+export function useShifts() {
+  return useQuery({
+    queryKey: ['shifts'],
+    queryFn: async () => (await apiClient.get<Shift[]>('/shifts')).data,
+  });
+}
+
+export interface CreateShiftInput {
+  code: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  breakMinutes: number;
+  graceInMinutes: number;
+  graceOutMinutes: number;
+  overtimeThresholdMinutes: number;
+}
+
+export function useCreateShift() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateShiftInput) => {
+      try {
+        return (await apiClient.post<Shift>('/shifts', input)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shifts'] }),
+  });
+}
+
+export interface AssignShiftInput {
+  shiftId: number;
+  employeeId?: number | null;
+  departmentId?: number | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+}
+
+export function useAssignShift() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AssignShiftInput) => {
+      try {
+        return (await apiClient.post('/shifts/assignments', input)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shifts'] }),
+  });
+}
+
+// --- Attendance (P2) ---
+export function useAttendanceRecords(
+  page: number,
+  pageSize: number,
+  filters: { employeeId?: number; fromDate?: string; toDate?: string } = {},
+) {
+  return useQuery({
+    queryKey: ['attendance', page, pageSize, filters],
+    queryFn: async () =>
+      (await apiClient.get<PagedResult<AttendanceRecord>>('/attendance/records', {
+        params: { page, pageSize, ...filters },
+      })).data,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAttendanceRecord(id: number | null) {
+  return useQuery({
+    queryKey: ['attendance-record', id],
+    enabled: id !== null,
+    queryFn: async () =>
+      (await apiClient.get<AttendanceRecord>(`/attendance/records/${id}`)).data,
+  });
+}
+
+export interface CorrectAttendanceInput {
+  id: number;
+  firstInUtc?: string | null;
+  lastOutUtc?: string | null;
+  reason: string;
+  ifMatch: string; // ETag concurrency token (05 §8.2)
+}
+
+export function useCorrectAttendance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CorrectAttendanceInput) => {
+      try {
+        const { data } = await apiClient.patch<AttendanceRecord>(
+          `/attendance/records/${input.id}`,
+          { firstInUtc: input.firstInUtc, lastOutUtc: input.lastOutUtc, reason: input.reason },
+          { headers: { 'If-Match': `"${input.ifMatch}"` } },
+        );
+        return data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance'] }),
+  });
+}
+
+// --- Devices (P3) ---
+export function useDevices() {
+  return useQuery({
+    queryKey: ['devices'],
+    queryFn: async () => (await apiClient.get<Device[]>('/devices')).data,
+    // Device health should feel live; refetch periodically (08 §8.4, NFR-03).
+    refetchInterval: 15000,
+  });
+}
+
+export function useDeviceSyncState(deviceId: number | null) {
+  return useQuery({
+    queryKey: ['device-sync-state', deviceId],
+    enabled: deviceId !== null,
+    queryFn: async () =>
+      (await apiClient.get<DeviceSyncState>(`/devices/${deviceId}/sync-state`)).data,
+  });
+}
+
+export interface RegisterDeviceInput {
+  serialNo: string;
+  name: string;
+  ipAddress?: string | null;
+  port?: number | null;
+  model?: string | null;
+}
+
+export function useRegisterDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RegisterDeviceInput) => {
+      try {
+        return (await apiClient.post<Device>('/devices', input)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['devices'] }),
+  });
+}
+
+/** Device action hook factory (sync-now, test-connection, enable, disable, reconcile). */
+function useDeviceAction<T>(path: (id: number) => string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (deviceId: number) => {
+      try {
+        return (await apiClient.post<T>(path(deviceId))).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['devices'] }),
+  });
+}
+
+export const useSyncDevice = () => useDeviceAction<SyncDeviceResult>((id) => `/devices/${id}/sync-now`);
+export const useTestDevice = () => useDeviceAction<TestConnectionResult>((id) => `/devices/${id}/test-connection`);
+export const useReconcileDevice = () => useDeviceAction<ReconcileResult>((id) => `/devices/${id}/reconcile`);
+export const useEnableDevice = () => useDeviceAction<Device>((id) => `/devices/${id}/enable`);
+export const useDisableDevice = () => useDeviceAction<Device>((id) => `/devices/${id}/disable`);
+
+export function useDeviceEnrollments(deviceId: number | null) {
+  return useQuery({
+    queryKey: ['device-enrollments', deviceId],
+    enabled: deviceId !== null,
+    queryFn: async () =>
+      (await apiClient.get<Enrollment[]>(`/devices/${deviceId}/enrollments`)).data,
+  });
+}
+
+export function useEnrollEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { deviceId: number; employeeId: number; deviceUserId: string }) => {
+      try {
+        return (await apiClient.post<Enrollment>(
+          `/devices/${input.deviceId}/enrollments`,
+          { employeeId: input.employeeId, deviceUserId: input.deviceUserId },
+        )).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: ['device-enrollments', vars.deviceId] }),
   });
 }

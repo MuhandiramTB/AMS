@@ -10,8 +10,11 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { label: 'Dashboard', to: '/' },
+  { label: 'Attendance', to: '/attendance', permission: 'Attendance.Read' },
+  { label: 'Shifts', to: '/shifts', permission: 'Shift.Read' },
   { label: 'Employees', to: '/employees', permission: 'Employee.Read' },
   { label: 'Departments', to: '/departments', permission: 'Department.Read' },
+  { label: 'Devices', to: '/devices', permission: 'Device.Read' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
