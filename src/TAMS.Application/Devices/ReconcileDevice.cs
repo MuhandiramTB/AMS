@@ -4,8 +4,13 @@ using TAMS.Domain.Attendance;
 
 namespace TAMS.Application.Devices;
 
-/// <summary>Reconciliation outcome: proves completeness by comparing device vs stored.</summary>
-public sealed record ReconcileDeviceResult(long DeviceId, int DeviceCount, int StoredCount, int MissingCount, bool Clean);
+/// <summary>
+/// Reconciliation outcome. MissingCount = on device but not stored (the loss-critical
+/// direction). ExtraCount = stored but not on device (divergence/diagnostic). Clean
+/// requires both to be zero. (FR-ZK-007.)
+/// </summary>
+public sealed record ReconcileDeviceResult(
+    long DeviceId, int DeviceCount, int StoredCount, int MissingCount, int ExtraCount, bool Clean);
 
 /// <summary>
 /// Compares the full set of transactions the device holds against what we have
@@ -44,9 +49,10 @@ public sealed class ReconcileDeviceHandler : IRequestHandler<ReconcileDeviceComm
         var storedKeys = await _attendance.GetPunchKeysForDeviceAsync(device.Id, cancellationToken);
         var storedSet = storedKeys.ToHashSet();
 
-        var missing = deviceKeys.Count(k => !storedSet.Contains(k));
+        var missing = deviceKeys.Count(k => !storedSet.Contains(k)); // on device, not stored (loss)
+        var extra = storedSet.Count(k => !deviceKeys.Contains(k));   // stored, not on device (divergence)
 
         return new ReconcileDeviceResult(
-            device.Id, deviceKeys.Count, storedSet.Count, missing, Clean: missing == 0);
+            device.Id, deviceKeys.Count, storedSet.Count, missing, extra, Clean: missing == 0 && extra == 0);
     }
 }

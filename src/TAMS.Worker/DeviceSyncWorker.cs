@@ -53,41 +53,75 @@ public sealed class DeviceSyncWorker : BackgroundService
         }
     }
 
+    // Per-device backoff: after N consecutive failures, skip the device for a
+    // number of cycles that grows exponentially (capped), so an unreachable device
+    // isn't hammered every interval. (FR-ZK-005 backoff.)
+    private readonly Dictionary<long, int> _skipCyclesRemaining = new();
+
     private async Task RunCycleAsync(CancellationToken stoppingToken)
     {
-        // A fresh scope per cycle (scoped DbContext/handlers). (12-Factor, EF scoping.)
-        using var scope = _scopeFactory.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<ISender>();
-        var devices = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
+        // Enumerate devices in a short-lived scope.
+        List<long> deviceIds;
+        using (var listScope = _scopeFactory.CreateScope())
+        {
+            var repo = listScope.ServiceProvider.GetRequiredService<IDeviceRepository>();
+            deviceIds = (await repo.GetEnabledAsync(stoppingToken)).Select(d => d.Id).ToList();
+        }
 
-        var enabled = await devices.GetEnabledAsync(stoppingToken);
-        foreach (var device in enabled)
+        foreach (var deviceId in deviceIds)
         {
             stoppingToken.ThrowIfCancellationRequested();
+
+            // Honour per-device backoff: skip this cycle if still cooling down.
+            if (_skipCyclesRemaining.TryGetValue(deviceId, out var skip) && skip > 0)
+            {
+                _skipCyclesRemaining[deviceId] = skip - 1;
+                continue;
+            }
+
+            // Fresh scope PER DEVICE → each device gets its own correlation id for
+            // end-to-end traceability. (LOW fix; FR-ZK-009.)
+            using var scope = _scopeFactory.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService<ISender>();
+
             try
             {
                 var result = await mediator.Send(
-                    new SyncDeviceCommand(device.Id, _options.UnreachableAlertThreshold), stoppingToken);
+                    new SyncDeviceCommand(deviceId, _options.UnreachableAlertThreshold), stoppingToken);
 
                 if (result.Reachable)
                 {
+                    _skipCyclesRemaining.Remove(deviceId); // recovered → clear backoff
                     _logger.LogInformation(
                         "Synced device {DeviceId}: ingested {Ingested}, dup {Dup}, unresolved {Unresolved}, watermark advanced {Advanced}",
                         result.DeviceId, result.Ingested, result.Duplicates, result.Unresolved, result.WatermarkAdvanced);
                 }
                 else
                 {
+                    ApplyBackoff(deviceId);
                     _logger.LogWarning(
-                        "Device {DeviceId} unreachable this cycle (alerted: {Alerted}). Watermark preserved; will recover on reconnect.",
-                        result.DeviceId, result.Alerted);
+                        "Device {DeviceId} unreachable (alerted: {Alerted}); backing off {Skip} cycle(s). Watermark preserved.",
+                        result.DeviceId, result.Alerted, _skipCyclesRemaining.GetValueOrDefault(deviceId));
                 }
             }
             catch (Exception ex)
             {
-                // Isolate per-device failures so the rest of the fleet still syncs.
-                _logger.LogError(ex, "Sync failed for device {DeviceId}", device.Id);
+                ApplyBackoff(deviceId);
+                _logger.LogError(ex, "Sync failed for device {DeviceId}; backing off.", deviceId);
             }
         }
+    }
+
+    /// <summary>
+    /// Exponentially increases the number of cycles a failing device is skipped
+    /// (1, 2, 4, … capped at MaxBackoffCycles), so retries back off instead of
+    /// hammering an unreachable device every interval. (FR-ZK-005.)
+    /// </summary>
+    private void ApplyBackoff(long deviceId)
+    {
+        var current = _skipCyclesRemaining.GetValueOrDefault(deviceId, 0);
+        var next = current <= 0 ? 1 : Math.Min(current * 2, _options.MaxBackoffCycles);
+        _skipCyclesRemaining[deviceId] = next;
     }
 }
 
@@ -96,4 +130,7 @@ public sealed class WorkerOptions
 {
     public int PollIntervalSeconds { get; set; } = 30;
     public int UnreachableAlertThreshold { get; set; } = 3;
+
+    /// <summary>Upper bound on consecutive cycles a failing device is skipped.</summary>
+    public int MaxBackoffCycles { get; set; } = 10;
 }

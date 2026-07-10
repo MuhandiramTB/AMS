@@ -52,4 +52,11 @@ public sealed class DeviceRepository : IDeviceRepository
             .FirstOrDefaultAsync(e => e.DeviceId == deviceId && e.DeviceUserId == deviceUserId && e.IsActive, cancellationToken);
         return enrollment?.EmployeeId;
     }
+
+    public Task<EmployeeDeviceEnrollment?> GetEnrollmentByIdAsync(long enrollmentId, CancellationToken cancellationToken = default) =>
+        _db.EmployeeDeviceEnrollments.FirstOrDefaultAsync(e => e.Id == enrollmentId, cancellationToken);
+
+    public async Task<IReadOnlyList<EmployeeDeviceEnrollment>> GetEnrollmentsForDeviceAsync(long deviceId, CancellationToken cancellationToken = default) =>
+        await _db.EmployeeDeviceEnrollments.AsNoTracking()
+            .Where(e => e.DeviceId == deviceId).OrderBy(e => e.DeviceUserId).ToListAsync(cancellationToken);
 }

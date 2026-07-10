@@ -23,4 +23,7 @@ public interface IDeviceRepository
 
     /// <summary>Resolves the employee owning a (device, deviceUserId) pair, or null if unenrolled. (BRULE-09.)</summary>
     Task<long?> ResolveEmployeeIdAsync(long deviceId, string deviceUserId, CancellationToken cancellationToken = default);
+
+    Task<EmployeeDeviceEnrollment?> GetEnrollmentByIdAsync(long enrollmentId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<EmployeeDeviceEnrollment>> GetEnrollmentsForDeviceAsync(long deviceId, CancellationToken cancellationToken = default);
 }

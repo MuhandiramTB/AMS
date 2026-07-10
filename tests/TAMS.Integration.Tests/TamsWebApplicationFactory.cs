@@ -61,6 +61,14 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
         return await mediator.Send(request);
     }
 
+    /// <summary>Runs a void MediatR request within a fresh DI scope.</summary>
+    public async Task SendAsync(MediatR.IRequest request)
+    {
+        using var scope = Services.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<MediatR.ISender>();
+        await mediator.Send(request);
+    }
+
     /// <summary>
     /// Counts DEVICE-SOURCED punches for a device (to assert zero loss / no dup).
     /// Filters to PunchSource.Device so manual-entry punches from other test classes

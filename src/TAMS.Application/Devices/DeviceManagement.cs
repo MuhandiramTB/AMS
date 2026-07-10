@@ -86,6 +86,66 @@ public sealed class TestDeviceConnectionHandler : IRequestHandler<TestDeviceConn
     }
 }
 
+// --- Update device details (FR-ZK-010) ---
+public sealed record UpdateDeviceCommand(long DeviceId, string Name, string? IpAddress, int? Port, string? Model)
+    : IRequest<DeviceDto>;
+
+public sealed class UpdateDeviceValidator : AbstractValidator<UpdateDeviceCommand>
+{
+    public UpdateDeviceValidator()
+    {
+        RuleFor(x => x.DeviceId).GreaterThan(0);
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+    }
+}
+
+public sealed class UpdateDeviceHandler : IRequestHandler<UpdateDeviceCommand, DeviceDto>
+{
+    private readonly IDeviceRepository _devices;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public UpdateDeviceHandler(IDeviceRepository devices, IUnitOfWork unitOfWork)
+    {
+        _devices = devices;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<DeviceDto> Handle(UpdateDeviceCommand request, CancellationToken cancellationToken)
+    {
+        var device = await _devices.GetByIdAsync(request.DeviceId, cancellationToken)
+            ?? throw new NotFoundException("Device", request.DeviceId);
+
+        device.UpdateDetails(request.Name, request.IpAddress, request.Port, request.Model);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return DeviceDto.FromEntity(device);
+    }
+}
+
+// --- Enable / disable device (FR-ZK-010): disabled devices are not polled ---
+public sealed record SetDeviceEnabledCommand(long DeviceId, bool Enabled) : IRequest<DeviceDto>;
+
+public sealed class SetDeviceEnabledHandler : IRequestHandler<SetDeviceEnabledCommand, DeviceDto>
+{
+    private readonly IDeviceRepository _devices;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public SetDeviceEnabledHandler(IDeviceRepository devices, IUnitOfWork unitOfWork)
+    {
+        _devices = devices;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<DeviceDto> Handle(SetDeviceEnabledCommand request, CancellationToken cancellationToken)
+    {
+        var device = await _devices.GetByIdAsync(request.DeviceId, cancellationToken)
+            ?? throw new NotFoundException("Device", request.DeviceId);
+
+        if (request.Enabled) device.Enable(); else device.Disable();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return DeviceDto.FromEntity(device);
+    }
+}
+
 // --- Get sync state (FR-ZK-011 visibility) ---
 public sealed record GetDeviceSyncStateQuery(long DeviceId) : IRequest<DeviceSyncStateDto>;
 

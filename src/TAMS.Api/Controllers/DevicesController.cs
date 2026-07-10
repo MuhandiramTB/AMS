@@ -9,6 +9,7 @@ namespace TAMS.Api.Controllers;
 public sealed class DevicesController : ApiControllerBase
 {
     public sealed record RegisterDeviceRequest(string SerialNo, string Name, string? IpAddress, int? Port, string? Model);
+    public sealed record UpdateDeviceRequest(string Name, string? IpAddress, int? Port, string? Model);
     public sealed record EnrollRequest(long EmployeeId, string DeviceUserId);
 
     [HttpGet]
@@ -28,6 +29,30 @@ public sealed class DevicesController : ApiControllerBase
             request.SerialNo, request.Name, request.IpAddress, request.Port, request.Model), cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { id = result.Id }, result);
     }
+
+    /// <summary>PUT /devices/{id} — edit device details. (FR-ZK-010.)</summary>
+    [HttpPut("{id:long}")]
+    [HasPermission(Permissions.DeviceManage)]
+    [ProducesResponseType(typeof(DeviceDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeviceDto>> Update(
+        long id, [FromBody] UpdateDeviceRequest request, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new UpdateDeviceCommand(
+            id, request.Name, request.IpAddress, request.Port, request.Model), cancellationToken));
+
+    /// <summary>POST /devices/{id}/enable — resume polling. (FR-ZK-010.)</summary>
+    [HttpPost("{id:long}/enable")]
+    [HasPermission(Permissions.DeviceManage)]
+    [ProducesResponseType(typeof(DeviceDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DeviceDto>> Enable(long id, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new SetDeviceEnabledCommand(id, true), cancellationToken));
+
+    /// <summary>POST /devices/{id}/disable — stop polling (device retained). (FR-ZK-010.)</summary>
+    [HttpPost("{id:long}/disable")]
+    [HasPermission(Permissions.DeviceManage)]
+    [ProducesResponseType(typeof(DeviceDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DeviceDto>> Disable(long id, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new SetDeviceEnabledCommand(id, false), cancellationToken));
 
     /// <summary>POST /devices/{id}/test-connection — probe reachability. (FR-ZK-010.)</summary>
     [HttpPost("{id:long}/test-connection")]
@@ -74,4 +99,29 @@ public sealed class DevicesController : ApiControllerBase
             new EnrollEmployeeCommand(request.EmployeeId, id, request.DeviceUserId), cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result);
     }
+
+    /// <summary>GET /devices/{id}/enrollments — list this device's enrollments.</summary>
+    [HttpGet("{id:long}/enrollments")]
+    [HasPermission(Permissions.DeviceRead)]
+    [ProducesResponseType(typeof(IReadOnlyList<EnrollmentDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<EnrollmentDto>>> GetEnrollments(long id, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new GetDeviceEnrollmentsQuery(id), cancellationToken));
+
+    /// <summary>DELETE /devices/{id}/enrollments/{enrollmentId} — deactivate an enrollment (soft).</summary>
+    [HttpDelete("{id:long}/enrollments/{enrollmentId:long}")]
+    [HasPermission(Permissions.DeviceManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeactivateEnrollment(long id, long enrollmentId, CancellationToken cancellationToken)
+    {
+        await Mediator.Send(new DeactivateEnrollmentCommand(enrollmentId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>POST /devices/{id}/push-enrollments — push enrolled users to the terminal. (FR-ZK-003 outbound.)</summary>
+    [HttpPost("{id:long}/push-enrollments")]
+    [HasPermission(Permissions.DeviceManage)]
+    [ProducesResponseType(typeof(SyncEnrollmentsToDeviceResult), StatusCodes.Status200OK)]
+    public async Task<ActionResult<SyncEnrollmentsToDeviceResult>> PushEnrollments(long id, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new SyncEnrollmentsToDeviceCommand(id), cancellationToken));
 }

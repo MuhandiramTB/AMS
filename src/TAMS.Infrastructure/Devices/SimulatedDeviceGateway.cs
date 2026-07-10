@@ -70,8 +70,11 @@ public sealed class SimulatedDeviceGateway : IDeviceGateway
             throw new IOException($"Network drop mid-download for {connection.SerialNo} (simulated).");
         }
 
+        // Inclusive lower bound (>=): re-fetch punches at exactly the watermark
+        // instant so a same-timestamp late arrival is never permanently skipped;
+        // idempotent ingest drops the already-stored boundary punches. (LOW fix.)
         IReadOnlyList<DeviceTransaction> result = buffer
-            .Where(t => sinceUtc is null || t.PunchedAtUtc > sinceUtc)
+            .Where(t => sinceUtc is null || t.PunchedAtUtc >= sinceUtc)
             .OrderBy(t => t.PunchedAtUtc)
             .ToList();
 
@@ -88,4 +91,30 @@ public sealed class SimulatedDeviceGateway : IDeviceGateway
         IReadOnlyList<DeviceTransaction> all = buffer.ToList();
         return Task.FromResult(all);
     }
+
+    // Enrolled device-user-ids the simulator "knows about" (outbound sync target).
+    private readonly ConcurrentDictionary<string, HashSet<string>> _knownUsers = new();
+
+    public Task<int> SyncEnrollmentsToDeviceAsync(
+        DeviceConnection connection, IReadOnlyList<string> deviceUserIds, CancellationToken cancellationToken = default)
+    {
+        if (_outage.TryGetValue(connection.SerialNo, out var down) && down)
+        {
+            throw new IOException($"Device {connection.SerialNo} is unreachable (simulated).");
+        }
+
+        var known = _knownUsers.GetOrAdd(connection.SerialNo, _ => new HashSet<string>());
+        foreach (var id in deviceUserIds)
+        {
+            known.Add(id);
+        }
+
+        _logger.LogInformation(
+            "Simulated enrollment push {Serial}: {Count} users now provisioned", connection.SerialNo, known.Count);
+        return Task.FromResult(deviceUserIds.Count);
+    }
+
+    /// <summary>Test/inspection: device-user-ids the simulated device has been told about.</summary>
+    public IReadOnlyCollection<string> KnownUsers(string serialNo) =>
+        _knownUsers.TryGetValue(serialNo, out var set) ? set.ToList() : Array.Empty<string>();
 }

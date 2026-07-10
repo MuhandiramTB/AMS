@@ -35,6 +35,15 @@ public interface IDeviceGateway
     /// </summary>
     Task<IReadOnlyList<DeviceTransaction>> ListAllTransactionsAsync(
         DeviceConnection connection, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Pushes the set of enrolled device-user-ids to the terminal so it recognises
+    /// them (outbound half of enrollment sync, FR-ZK-003). The real SDK adapter
+    /// provisions users on the device; the simulator records the intent. Returns
+    /// the count accepted by the device.
+    /// </summary>
+    Task<int> SyncEnrollmentsToDeviceAsync(
+        DeviceConnection connection, IReadOnlyList<string> deviceUserIds, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Connection details passed to the gateway (kept out of the domain).</summary>
