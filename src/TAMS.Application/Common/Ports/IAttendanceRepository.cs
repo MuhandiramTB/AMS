@@ -16,6 +16,14 @@ public interface IAttendanceRepository
     /// <summary>All stored punch idempotency keys for a device (for reconciliation). (FR-ZK-007.)</summary>
     Task<IReadOnlyList<string>> GetPunchKeysForDeviceAsync(long deviceId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Back-fills EmployeeId on previously-unresolved punches for a (device, deviceUserId)
+    /// once an enrollment makes them resolvable, so no captured punch is orphaned.
+    /// Returns the affected work dates so attendance can be (re)processed. (FR-ZK-003, BRULE-09.)
+    /// </summary>
+    Task<IReadOnlyList<DateOnly>> ResolveOrphanPunchesAsync(
+        long deviceId, string deviceUserId, long employeeId, CancellationToken cancellationToken = default);
+
     /// <summary>Punches attributable to an employee on a work date (covers overnight next-day punches).</summary>
     Task<IReadOnlyList<PunchTransaction>> GetPunchesForDayAsync(
         long employeeId, DateOnly workDate, CancellationToken cancellationToken = default);

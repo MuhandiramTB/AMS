@@ -72,6 +72,24 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
                 p.SourceType == TAMS.Domain.Attendance.PunchSource.Device));
     }
 
+    /// <summary>Counts punches now attributed to an employee (verifies orphan back-fill).</summary>
+    public async Task<int> CountResolvedPunchesAsync(long employeeId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TamsDbContext>();
+        return await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
+            db.Punches.Where(p => p.EmployeeId == employeeId));
+    }
+
+    /// <summary>True if a processed attendance record exists for the employee/date.</summary>
+    public async Task<bool> HasAttendanceRecordAsync(long employeeId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TamsDbContext>();
+        return await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AnyAsync(
+            db.AttendanceRecords.Where(r => r.EmployeeId == employeeId));
+    }
+
     /// <summary>Ensures a clean, migrated, seeded database before the tests run.</summary>
     public async Task ResetDatabaseAsync()
     {

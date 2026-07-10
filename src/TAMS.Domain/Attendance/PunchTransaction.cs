@@ -47,4 +47,20 @@ public sealed class PunchTransaction : Entity
     public PunchSource SourceType { get; private set; }
     public string IdempotencyKey { get; private set; } = string.Empty;
     public DateTime CreatedAtUtc { get; private set; }
+
+    /// <summary>
+    /// Attributes a previously-unresolved punch to its owning employee once an
+    /// enrollment is created. This does not alter the raw fact (time/direction/
+    /// device) — it only fills in the resolution that was unknown at capture. Only
+    /// permitted while currently unresolved. (FR-ZK-003, BRULE-09.)
+    /// </summary>
+    public void ResolveEmployee(long employeeId)
+    {
+        if (EmployeeId is not null)
+        {
+            throw new DomainException("This punch is already attributed to an employee.");
+        }
+
+        EmployeeId = employeeId;
+    }
 }

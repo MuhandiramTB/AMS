@@ -18,6 +18,9 @@ public sealed class SimulatedDeviceGateway : IDeviceGateway
     private readonly ConcurrentDictionary<string, List<DeviceTransaction>> _buffers = new();
     // Per-device outage flag; when set, downloads throw (simulating unreachable).
     private readonly ConcurrentDictionary<string, bool> _outage = new();
+    // Per-device "fail once mid-download" flag; models a network drop partway
+    // through a transfer (throws after the buffer is read but before returning).
+    private readonly ConcurrentDictionary<string, bool> _failNextDownload = new();
 
     private readonly ILogger<SimulatedDeviceGateway> _logger;
 
@@ -32,6 +35,9 @@ public sealed class SimulatedDeviceGateway : IDeviceGateway
 
     /// <summary>Simulates the device/network going down (downloads will throw).</summary>
     public void SetOutage(string serialNo, bool down) => _outage[serialNo] = down;
+
+    /// <summary>Arms a one-shot mid-download failure (network drop) for the next download.</summary>
+    public void FailNextDownload(string serialNo) => _failNextDownload[serialNo] = true;
 
     public void ClearBuffer(string serialNo) => _buffers.TryRemove(serialNo, out _);
 
@@ -54,6 +60,16 @@ public sealed class SimulatedDeviceGateway : IDeviceGateway
         }
 
         var buffer = _buffers.GetOrAdd(connection.SerialNo, _ => new List<DeviceTransaction>());
+
+        // One-shot mid-download failure: read the buffer, then drop the connection
+        // before returning — models a partial transfer. The worker must not advance
+        // the watermark; the next cycle re-downloads and de-dupes.
+        if (_failNextDownload.TryGetValue(connection.SerialNo, out var fail) && fail)
+        {
+            _failNextDownload[connection.SerialNo] = false;
+            throw new IOException($"Network drop mid-download for {connection.SerialNo} (simulated).");
+        }
+
         IReadOnlyList<DeviceTransaction> result = buffer
             .Where(t => sinceUtc is null || t.PunchedAtUtc > sinceUtc)
             .OrderBy(t => t.PunchedAtUtc)

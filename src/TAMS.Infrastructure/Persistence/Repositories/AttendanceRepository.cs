@@ -51,6 +51,24 @@ public sealed class AttendanceRepository : IAttendanceRepository
             .Select(p => p.IdempotencyKey)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<DateOnly>> ResolveOrphanPunchesAsync(
+        long deviceId, string deviceUserId, long employeeId, CancellationToken cancellationToken = default)
+    {
+        // Tracked (not AsNoTracking) so the EmployeeId back-fill is persisted.
+        var orphans = await _db.Punches
+            .Where(p => p.DeviceId == deviceId && p.DeviceUserId == deviceUserId && p.EmployeeId == null)
+            .ToListAsync(cancellationToken);
+
+        var affectedDates = new HashSet<DateOnly>();
+        foreach (var punch in orphans)
+        {
+            punch.ResolveEmployee(employeeId);
+            affectedDates.Add(DateOnly.FromDateTime(punch.PunchedAtUtc));
+        }
+
+        return affectedDates.ToList();
+    }
+
     public async Task<IReadOnlyList<PunchTransaction>> GetPunchesForDayAsync(
         long employeeId, DateOnly workDate, CancellationToken cancellationToken = default)
     {

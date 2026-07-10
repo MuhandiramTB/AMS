@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using TAMS.Application.Attendance;
 using TAMS.Application.Common.Exceptions;
 using TAMS.Application.Common.Ports;
 using TAMS.Domain.Devices;
@@ -28,12 +29,21 @@ public sealed class EnrollEmployeeHandler : IRequestHandler<EnrollEmployeeComman
 {
     private readonly IDeviceRepository _devices;
     private readonly IEmployeeRepository _employees;
+    private readonly IAttendanceRepository _attendance;
+    private readonly ISender _mediator;
     private readonly IUnitOfWork _unitOfWork;
 
-    public EnrollEmployeeHandler(IDeviceRepository devices, IEmployeeRepository employees, IUnitOfWork unitOfWork)
+    public EnrollEmployeeHandler(
+        IDeviceRepository devices,
+        IEmployeeRepository employees,
+        IAttendanceRepository attendance,
+        ISender mediator,
+        IUnitOfWork unitOfWork)
     {
         _devices = devices;
         _employees = employees;
+        _attendance = attendance;
+        _mediator = mediator;
         _unitOfWork = unitOfWork;
     }
 
@@ -58,7 +68,20 @@ public sealed class EnrollEmployeeHandler : IRequestHandler<EnrollEmployeeComman
 
         var enrollment = new EmployeeDeviceEnrollment(request.EmployeeId, request.DeviceId, request.DeviceUserId);
         await _devices.AddEnrollmentAsync(enrollment, cancellationToken);
+
+        // Back-fill any punches captured before this enrollment existed, so no
+        // previously-unresolved punch is orphaned. (FR-ZK-003, BRULE-09.)
+        var affectedDates = await _attendance.ResolveOrphanPunchesAsync(
+            request.DeviceId, request.DeviceUserId, request.EmployeeId, cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // (Re)process attendance for the recovered days so the punches enter records.
+        foreach (var date in affectedDates)
+        {
+            await _mediator.Send(new ProcessAttendanceCommand(request.EmployeeId, date), cancellationToken);
+        }
+
         return EnrollmentDto.FromEntity(enrollment);
     }
 }
