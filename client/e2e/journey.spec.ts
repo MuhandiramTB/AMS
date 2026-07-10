@@ -46,7 +46,9 @@ test.describe('Core workforce journey (real browser, real API)', () => {
     await page.locator('input[type="time"]').first().fill('09:00');
     await page.locator('input[type="time"]').nth(1).fill('17:00');
     await page.getByRole('button', { name: /create shift/i }).click();
-    await expect(page.getByText(shiftCode)).toBeVisible();
+    // The code appears both in the new table row and in the assignment <select>
+    // options; assert on the table cell specifically.
+    await expect(page.getByRole('cell', { name: shiftCode })).toBeVisible();
 
     // Device
     const serial = unique('ZK');
@@ -54,7 +56,7 @@ test.describe('Core workforce journey (real browser, real API)', () => {
     await page.getByPlaceholder('Serial no').fill(serial);
     await page.getByPlaceholder('Name').fill('E2E Gate');
     await page.getByRole('button', { name: /register device/i }).click();
-    await expect(page.getByText(serial)).toBeVisible();
+    await expect(page.getByRole('cell', { name: serial })).toBeVisible();
   });
 
   test('correct an attendance record with a mandatory reason (the review spine)', async ({ page, request }) => {
