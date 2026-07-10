@@ -1,0 +1,94 @@
+# ---------------------------------------------------------------------------
+# TAMS on-premises baseline topology (11 §7). One edge proxy (TLS + SPA + /api),
+# two stateless API replicas, one Worker (single active instance — ADR-002 /
+# §12), and SQL Server with TDE + backups. All secrets/config come from .env
+# (see .env.example); none are baked into images (11 §5, 06 §9).
+#
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
+#
+# Migrations are NOT run here — apply them first with the gated migrate job
+# (deploy/migrations/migrate.sh); the app does not auto-migrate in production.
+# ---------------------------------------------------------------------------
+name: tams
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set in .env}
+    volumes:
+      - tams-db-data:/var/opt/mssql
+    networks: [app-tier]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: src/TAMS.Api/Dockerfile
+    image: tams/api:${TAMS_TAG:-latest}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: ${TAMS_DB_CONNECTION:?set in .env}
+      Jwt__SigningKey: ${TAMS_JWT_SIGNING_KEY:?set in .env}
+      Jwt__Issuer: ${TAMS_JWT_ISSUER:-TAMS}
+      Jwt__Audience: ${TAMS_JWT_AUDIENCE:-TAMS.Client}
+      Cors__AllowedOrigins__0: ${TAMS_SPA_ORIGIN:?set in .env}
+      AllowedHosts: ${TAMS_ALLOWED_HOSTS:?set in .env}
+    # Two stateless replicas behind the proxy (11 §7, AP-06).
+    deploy:
+      replicas: 2
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [app-tier]
+    restart: unless-stopped
+    expose: ["8080"]
+
+  worker:
+    build:
+      context: ..
+      dockerfile: src/TAMS.Worker/Dockerfile
+    image: tams/worker:${TAMS_TAG:-latest}
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Default: ${TAMS_DB_CONNECTION:?set in .env}
+      Jwt__SigningKey: ${TAMS_JWT_SIGNING_KEY:?set in .env}
+      Worker__PollIntervalSeconds: ${TAMS_WORKER_POLL_SECONDS:-30}
+    # Single active instance — two workers would double-poll a device (§12).
+    deploy:
+      replicas: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [app-tier, device-net]
+    restart: unless-stopped
+
+  proxy:
+    build:
+      context: ../client
+      dockerfile: Dockerfile
+    image: tams/spa:${TAMS_TAG:-latest}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TAMS_TLS_CERT_DIR:?set in .env}:/etc/nginx/certs:ro
+    depends_on: [api]
+    networks: [app-tier]
+    restart: unless-stopped
+
+networks:
+  # Data + app tier reachable only internally; the proxy is the only public edge.
+  app-tier:
+  # Segmented device VLAN — only the Worker bridges to the ZKTeco fleet (06 §12).
+  device-net:
+
+volumes:
+  tams-db-data:

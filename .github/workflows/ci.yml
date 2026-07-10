@@ -1,0 +1,136 @@
+# ---------------------------------------------------------------------------
+# TAMS CI pipeline (11 §4). Enforces every prior document's gates as concrete
+# stages; a failing stage blocks the PR merge. Promotion to environments is a
+# separate, gated deploy step (see deploy/RUNBOOK.md) — CI's job is to prove the
+# candidate is mergeable and to package images ONCE on main.
+# ---------------------------------------------------------------------------
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  DOTNET_VERSION: "8.0.400"
+  NODE_VERSION: "22"
+
+jobs:
+  # --- Backend: build, analyzers, unit + architecture tests ---
+  backend-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restore
+        run: dotnet restore TAMS.sln
+      # TreatWarningsAsErrors + analyzers (Directory.Build.props) make build the
+      # static-analysis gate (07 §12).
+      - name: Build (warnings = errors)
+        run: dotnet build TAMS.sln -c Release --no-restore
+      - name: Unit tests (Domain + Application)
+        run: |
+          dotnet test tests/TAMS.Domain.Tests/TAMS.Domain.Tests.csproj -c Release --no-build
+          dotnet test tests/TAMS.Application.Tests/TAMS.Application.Tests.csproj -c Release --no-build
+      - name: Architecture tests (Dependency Rule)
+        run: dotnet test tests/TAMS.Architecture.Tests/TAMS.Architecture.Tests.csproj -c Release --no-build
+
+  # --- Backend integration tests against a real SQL Server (10 §7) ---
+  backend-integration:
+    runs-on: ubuntu-latest
+    services:
+      sql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "CI_Only_Strong_P@ssw0rd"
+        ports: ["1433:1433"]
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P CI_Only_Strong_P@ssw0rd -Q 'SELECT 1' || exit 1"
+          --health-interval 15s --health-timeout 5s --health-retries 10
+    env:
+      # The integration factory reads ConnectionStrings:Default; point it at the
+      # service container. (LocalDB is not available on Linux CI.)
+      ConnectionStrings__Default: "Server=localhost,1433;Database=TAMS_IntegrationTests;User Id=sa;Password=CI_Only_Strong_P@ssw0rd;TrustServerCertificate=true;MultipleActiveResultSets=true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Integration + contract tests
+        run: dotnet test tests/TAMS.Integration.Tests/TAMS.Integration.Tests.csproj -c Release
+
+  # --- Frontend: lint, type-check + build, unit + a11y tests ---
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit + a11y tests
+        run: npm run test
+      - name: Type-check + production build
+        run: npm run build
+
+  # --- Security gate: dependency + secret scan (06 §15) ---
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      # NuGet vulnerability audit — fails on any known-vulnerable package. The
+      # NuGetAudit MSBuild setting already surfaces these at build; this is the
+      # explicit, reportable gate.
+      - name: .NET dependency vulnerability scan
+        run: |
+          dotnet restore TAMS.sln
+          dotnet list TAMS.sln package --vulnerable --include-transitive 2>&1 | tee audit.txt
+          if grep -q "has the following vulnerable packages" audit.txt; then
+            echo "::error::Vulnerable NuGet packages detected"; exit 1
+          fi
+      - name: npm audit (high severity blocks)
+        working-directory: client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+      # Secret scan on the full history/diff (06 §9 — no secrets in source).
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- Package images ONCE, only after merge to main (11 §3, DP-02) ---
+  package:
+    needs: [backend-build-test, backend-integration, frontend, security-scan]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -f src/TAMS.Api/Dockerfile -t tams/api:${{ github.sha }} .
+      - name: Build Worker image
+        run: docker build -f src/TAMS.Worker/Dockerfile -t tams/worker:${{ github.sha }} .
+      - name: Build SPA/proxy image
+        run: docker build -f client/Dockerfile -t tams/spa:${{ github.sha }} client
+      - name: Build EF migrations bundle
+        run: |
+          dotnet tool install --global dotnet-ef
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          bash deploy/migrations/build-bundle.sh
+      # Push to the registry here (omitted — registry + creds are org-specific).
+      # The same ${{ github.sha }} tag is promoted through environments (DP-02).

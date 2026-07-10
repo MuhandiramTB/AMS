@@ -19,8 +19,14 @@ client/.vite/
 # Env & secrets (06_SECURITY.md §9 — never commit secrets)
 .env
 .env.*
+!.env.example
+!*.env.example
 appsettings.*.local.json
 *.pfx
+*.crt
+*.key
+# TLS material mounted into the proxy at run time — never committed.
+deploy/certs/
 
 # OS
 Thumbs.db

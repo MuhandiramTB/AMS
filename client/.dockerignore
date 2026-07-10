@@ -1,0 +1,10 @@
+# Build context hygiene for the SPA image (context = client/).
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vscode/
+.env
+.env.*
+*.log

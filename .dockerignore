@@ -1,0 +1,20 @@
+# Build context hygiene for the API/Worker images (context = repo root).
+# Keep the context small and never ship build artifacts, tests, IDE files, the
+# SPA source, or any local secret-bearing config into the image.
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+.git/
+.github/
+client/
+docs/
+tests/
+**/*.user
+**/TestResults/
+# Local/dev config overlays must never enter the image (secrets come from the
+# environment at run time — 11 §5). The base appsettings.json (no secrets) is fine.
+**/appsettings.Development.json
+**/appsettings.*.local.json
+.env
+.env.*
