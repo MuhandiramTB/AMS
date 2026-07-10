@@ -63,9 +63,9 @@ export function DepartmentsPage() {
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-2">Code</th>
-              <th className="py-2">Name</th>
-              <th className="py-2">Status</th>
+              <th scope="col" className="py-2">Code</th>
+              <th scope="col" className="py-2">Name</th>
+              <th scope="col" className="py-2">Status</th>
             </tr>
           </thead>
           <tbody>

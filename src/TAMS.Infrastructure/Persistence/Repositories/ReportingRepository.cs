@@ -32,30 +32,30 @@ public sealed class ReportingRepository : IReportingRepository
             query = query.Where(x => x.PrimaryDepartmentId == departmentId);
         }
 
-        var rows = await query.ToListAsync(cancellationToken);
+        // Aggregate in SQL (GroupBy → conditional COUNTs) so the DB returns one row
+        // per department, not one per employee. The status derivation is expressed in
+        // the projection so EF translates it to CASE/SUM and no per-row app-side loop
+        // runs on every dashboard refresh. (NFR-03 — scales with departments, not
+        // headcount.) present = worked > 0; leave = Processed with no worked time;
+        // absent = Exception with no worked time.
+        var perDept = await query
+            .GroupBy(x => x.PrimaryDepartmentId)
+            .Select(g => new DepartmentAttendanceCount(
+                g.Key,
+                g.Count(x => x.WorkedMinutes > 0),
+                g.Count(x => x.LateMinutes > 0),
+                g.Count(x => x.Status == AttendanceStatus.Exception && x.WorkedMinutes == null),
+                g.Count(x => x.Status == AttendanceStatus.Processed && x.WorkedMinutes == null)))
+            .ToListAsync(cancellationToken);
 
-        int present = 0, late = 0, earlyLeave = 0, absent = 0, onLeave = 0;
-        var byDept = new Dictionary<long, (int Present, int Late, int Absent, int OnLeave)>();
+        // EarlyLeave is a whole-day total not tracked per department in the DTO;
+        // one extra scalar aggregate keeps it exact without materializing rows.
+        var earlyLeave = await query.CountAsync(x => x.EarlyLeaveMinutes > 0, cancellationToken);
 
-        foreach (var x in rows)
-        {
-            var isLeave = x.Status == AttendanceStatus.Processed && x.WorkedMinutes is null;
-            var isAbsent = x.Status == AttendanceStatus.Exception && x.WorkedMinutes is null && !isLeave;
-            var isPresent = x.WorkedMinutes is > 0;
-
-            if (isLeave) onLeave++;
-            else if (isAbsent) absent++;
-            else if (isPresent) present++;
-            if (x.LateMinutes > 0) late++;
-            if (x.EarlyLeaveMinutes > 0) earlyLeave++;
-
-            var d = byDept.GetValueOrDefault(x.PrimaryDepartmentId);
-            byDept[x.PrimaryDepartmentId] = (
-                d.Present + (isPresent ? 1 : 0),
-                d.Late + (x.LateMinutes > 0 ? 1 : 0),
-                d.Absent + (isAbsent ? 1 : 0),
-                d.OnLeave + (isLeave ? 1 : 0));
-        }
+        var present = perDept.Sum(d => d.Present);
+        var late = perDept.Sum(d => d.Late);
+        var absent = perDept.Sum(d => d.Absent);
+        var onLeave = perDept.Sum(d => d.OnLeave);
 
         var openExceptions = await _db.AttendanceRecords.AsNoTracking()
             .Where(r => r.WorkDate == workDate)
@@ -63,9 +63,7 @@ public sealed class ReportingRepository : IReportingRepository
             .CountAsync(x => !x.IsResolved, cancellationToken);
 
         return new AttendanceSummary(
-            workDate, present, late, earlyLeave, absent, onLeave, openExceptions,
-            byDept.Select(kv => new DepartmentAttendanceCount(
-                kv.Key, kv.Value.Present, kv.Value.Late, kv.Value.Absent, kv.Value.OnLeave)).ToList());
+            workDate, present, late, earlyLeave, absent, onLeave, openExceptions, perDept);
     }
 
     public async Task<(IReadOnlyList<DailyAttendanceRow> Items, int TotalCount)> GetDailyAttendanceAsync(
@@ -84,14 +82,20 @@ public sealed class ReportingRepository : IReportingRepository
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<AttendanceStatus>(status, out var st))
             query = query.Where(x => x.r.Status == st);
 
-        var total = await query.CountAsync(cancellationToken);
+        // Export path (pageSize == int.MaxValue): the date window is already bounded
+        // and validated at the command boundary, but we still cap the row count as a
+        // safety net and skip the redundant COUNT (the caller streams all rows).
+        var isExport = pageSize == int.MaxValue;
+        const int ExportRowCap = 500_000;
 
-        var take = pageSize == int.MaxValue ? int.MaxValue : pageSize;
+        var total = isExport ? 0 : await query.CountAsync(cancellationToken);
+
+        var take = isExport ? ExportRowCap : pageSize;
         var page1 = page < 1 ? 1 : page;
 
         var items = await query
             .OrderByDescending(x => x.r.WorkDate).ThenBy(x => x.r.EmployeeId)
-            .Skip((page1 - 1) * (take == int.MaxValue ? 0 : take))
+            .Skip(isExport ? 0 : (page1 - 1) * take)
             .Take(take)
             .Select(x => new DailyAttendanceRow(
                 x.r.EmployeeId, x.e.EmployeeNo, x.e.FirstName + " " + x.e.LastName, x.e.PrimaryDepartmentId,

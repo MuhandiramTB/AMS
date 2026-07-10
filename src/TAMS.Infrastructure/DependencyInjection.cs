@@ -21,8 +21,17 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Options
-        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        // Options — bound with fail-fast validation. A misconfigured deployment
+        // (missing/short signing key, blank issuer/audience) must crash at startup
+        // rather than silently run on a weak or empty key. (06 §6/§9, 12-Factor III.)
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.SigningKey)
+                    && System.Text.Encoding.UTF8.GetByteCount(o.SigningKey) >= 32,
+                "Jwt:SigningKey must be set and at least 32 bytes (256 bits).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Issuer), "Jwt:Issuer must be set.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Audience), "Jwt:Audience must be set.")
+            .ValidateOnStart();
         services.AddSingleton<IAuthPolicyOptions>(sp =>
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JwtOptions>>().Value);
 

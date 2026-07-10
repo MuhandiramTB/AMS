@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAttendanceRecords, useCorrectAttendance } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
@@ -66,9 +66,10 @@ export function AttendancePage() {
         <table className={`w-full border-collapse text-left text-sm ${records.isPlaceholderData ? 'opacity-60' : ''}`}>
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-2">Emp</th><th className="py-2">Date</th><th className="py-2">In</th>
-              <th className="py-2">Out</th><th className="py-2">Worked</th><th className="py-2">Late</th>
-              <th className="py-2">OT</th><th className="py-2">Status</th><th className="py-2"></th>
+              <th scope="col" className="py-2">Emp</th><th scope="col" className="py-2">Date</th><th scope="col" className="py-2">In</th>
+              <th scope="col" className="py-2">Out</th><th scope="col" className="py-2">Worked</th><th scope="col" className="py-2">Late</th>
+              <th scope="col" className="py-2">OT</th><th scope="col" className="py-2">Status</th>
+              <th scope="col" className="py-2"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -128,6 +129,44 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
     },
   });
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Dialog focus management (WCAG 2.4.3 / 4.1.2): move focus into the dialog on
+  // open, restore it to the element that opened the drawer on close, and trap Tab
+  // within the dialog so focus never escapes to the obscured page behind it.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [onClose]);
 
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
@@ -152,12 +191,18 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
   });
 
   return (
-    <div className="fixed inset-y-0 right-0 z-10 w-full max-w-md overflow-auto border-l border-slate-200 bg-white p-6 shadow-xl">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="corr-title"
+      className="fixed inset-y-0 right-0 z-10 w-full max-w-md overflow-auto border-l border-slate-200 bg-white p-6 shadow-xl"
+    >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-800">
+        <h2 id="corr-title" className="text-lg font-semibold text-slate-800">
           Record — Emp {record.employeeId}, {record.workDate}
         </h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700" aria-label="Close">✕</button>
+        <button ref={closeRef} onClick={onClose} className="text-slate-400 hover:text-slate-700" aria-label="Close">✕</button>
       </div>
 
       <div className="mb-4 rounded bg-slate-50 p-3 text-sm">

@@ -114,22 +114,44 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-// --- Migrate + seed at startup (dev convenience; prod migrates via controlled
-//     deploy step per 04 §14 / 11 §6). ---
-await using (var scope = app.Services.CreateAsyncScope())
+// --- Migrate + seed at startup. This is a DEVELOPMENT convenience only: production
+//     applies migrations via a controlled, out-of-process deploy step and seeds via
+//     a one-off admin action (04 §14 / 11 §6), so multi-replica rollouts don't race
+//     on schema and no known bootstrap credential is ever provisioned automatically.
+//     Wrapped so a migrate/seed failure produces an actionable fatal log, not an
+//     opaque stack trace, and exits non-zero. ---
+if (app.Environment.IsDevelopment())
 {
+    await using var scope = app.Services.CreateAsyncScope();
     var services = scope.ServiceProvider;
-    var db = services.GetRequiredService<TamsDbContext>();
-    await db.Database.MigrateAsync();
-
-    if (builder.Configuration.GetValue<bool>("Seed:Enabled"))
+    var startupLogger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    try
     {
-        var seeder = services.GetRequiredService<DatabaseSeeder>();
-        var admin = builder.Configuration.GetSection("BootstrapAdmin");
-        await seeder.SeedAsync(
-            admin.GetValue<string>("UserName") ?? "admin",
-            admin.GetValue<string>("Email") ?? "admin@tams.local",
-            admin.GetValue<string>("Password") ?? "ChangeMe!123");
+        var db = services.GetRequiredService<TamsDbContext>();
+        await db.Database.MigrateAsync();
+
+        if (builder.Configuration.GetValue<bool>("Seed:Enabled"))
+        {
+            var admin = builder.Configuration.GetSection("BootstrapAdmin");
+            var password = admin.GetValue<string>("Password");
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                throw new InvalidOperationException(
+                    "Seed:Enabled is true but BootstrapAdmin:Password is not configured. " +
+                    "Supply it via a secret store; no default credential is provisioned.");
+            }
+
+            var seeder = services.GetRequiredService<DatabaseSeeder>();
+            await seeder.SeedAsync(
+                admin.GetValue<string>("UserName") ?? "admin",
+                admin.GetValue<string>("Email") ?? "admin@tams.local",
+                password);
+        }
+    }
+    catch (Exception ex)
+    {
+        startupLogger.LogCritical(ex, "Database migrate/seed failed at startup; aborting.");
+        throw;
     }
 }
 

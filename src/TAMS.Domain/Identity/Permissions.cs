@@ -29,6 +29,7 @@ public static class Permissions
     // Employee, who are confined to their own records via server-derived scope. (06 §5.)
     public const string EmployeeReadAll = "Employee.ReadAll";
     public const string AttendanceReadAll = "Attendance.ReadAll";
+    public const string LeaveReadAll = "Leave.ReadAll";
 
     // Leave
     public const string LeaveRead = "Leave.Read";
@@ -64,6 +65,7 @@ public static class Permissions
         AttendanceCorrect,
         EmployeeReadAll,
         AttendanceReadAll,
+        LeaveReadAll,
         LeaveRead,
         LeaveRequest,
         LeaveApprove,

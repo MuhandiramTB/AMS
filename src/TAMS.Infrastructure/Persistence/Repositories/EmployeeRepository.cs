@@ -32,11 +32,15 @@ public sealed class EmployeeRepository : IEmployeeRepository
 
         if (!string.IsNullOrWhiteSpace(search))
         {
+            // Prefix match (StartsWith → LIKE 'term%') is SARGable and can seek the
+            // EmployeeNo/name indexes; a leading-wildcard Contains would force a full
+            // table scan on every keystroke and blow the NFR-01 budget as the roster
+            // grows. Substring search, if ever required, should use full-text search.
             var term = search.Trim();
             query = query.Where(e =>
-                e.EmployeeNo.Contains(term) ||
-                e.FirstName.Contains(term) ||
-                e.LastName.Contains(term));
+                e.EmployeeNo.StartsWith(term) ||
+                e.FirstName.StartsWith(term) ||
+                e.LastName.StartsWith(term));
         }
 
         var total = await query.CountAsync(cancellationToken);

@@ -66,11 +66,11 @@ export function DevicesPage() {
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-2">Name</th>
-              <th className="py-2">Serial</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Last seen</th>
-              <th className="py-2">Actions</th>
+              <th scope="col" className="py-2">Name</th>
+              <th scope="col" className="py-2">Serial</th>
+              <th scope="col" className="py-2">Status</th>
+              <th scope="col" className="py-2">Last seen</th>
+              <th scope="col" className="py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -187,10 +187,10 @@ function RegisterDeviceForm({ onDone }: { onDone: (m: string) => void }) {
 
   return (
     <form onSubmit={onSubmit} className="mb-6 flex flex-wrap items-end gap-2">
-      <input placeholder="Serial no" className="rounded border border-slate-300 px-2 py-1" {...form.register('serialNo', { required: true })} />
-      <input placeholder="Name" className="rounded border border-slate-300 px-2 py-1" {...form.register('name', { required: true })} />
-      <input placeholder="IP (optional)" className="rounded border border-slate-300 px-2 py-1" {...form.register('ipAddress')} />
-      <input placeholder="Port" type="number" className="w-24 rounded border border-slate-300 px-2 py-1" {...form.register('port')} />
+      <input aria-label="Serial number" placeholder="Serial no" className="rounded border border-slate-300 px-2 py-1" {...form.register('serialNo', { required: true })} />
+      <input aria-label="Device name" placeholder="Name" className="rounded border border-slate-300 px-2 py-1" {...form.register('name', { required: true })} />
+      <input aria-label="IP address (optional)" placeholder="IP (optional)" className="rounded border border-slate-300 px-2 py-1" {...form.register('ipAddress')} />
+      <input aria-label="Port" placeholder="Port" type="number" className="w-24 rounded border border-slate-300 px-2 py-1" {...form.register('port')} />
       <Button type="submit" variant="primary" disabled={register.isPending}>Register device</Button>
       {err && <span role="alert" className="text-sm text-red-600">{err}</span>}
     </form>
@@ -224,8 +224,8 @@ function EnrollmentPanel({ device, canManage, onMessage }: { device: Device; can
 
       {canManage && (
         <form onSubmit={onSubmit} className="mb-4 flex flex-wrap items-end gap-2">
-          <input placeholder="Employee ID" type="number" className="rounded border border-slate-300 px-2 py-1" {...form.register('employeeId', { required: true })} />
-          <input placeholder="Device user ID" className="rounded border border-slate-300 px-2 py-1" {...form.register('deviceUserId', { required: true })} />
+          <input aria-label="Employee ID" placeholder="Employee ID" type="number" className="rounded border border-slate-300 px-2 py-1" {...form.register('employeeId', { required: true })} />
+          <input aria-label="Device user ID" placeholder="Device user ID" className="rounded border border-slate-300 px-2 py-1" {...form.register('deviceUserId', { required: true })} />
           <Button type="submit" variant="primary" disabled={enroll.isPending}>Enroll</Button>
           {err && <span role="alert" className="text-sm text-red-600">{err}</span>}
         </form>
@@ -240,7 +240,7 @@ function EnrollmentPanel({ device, canManage, onMessage }: { device: Device; can
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-1">Employee ID</th><th className="py-1">Device User ID</th><th className="py-1">Status</th>
+              <th scope="col" className="py-1">Employee ID</th><th scope="col" className="py-1">Device User ID</th><th scope="col" className="py-1">Status</th>
             </tr>
           </thead>
           <tbody>

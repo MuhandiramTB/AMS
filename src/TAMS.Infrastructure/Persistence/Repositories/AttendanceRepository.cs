@@ -104,7 +104,14 @@ public sealed class AttendanceRepository : IAttendanceRepository
         int page, int pageSize, long? employeeId, DateOnly? fromDate, DateOnly? toDate,
         CancellationToken cancellationToken = default)
     {
-        var query = _db.AttendanceRecords.AsNoTracking().Include(r => r.Exceptions).AsQueryable();
+        // Split the Exceptions include into a second, key-based query so OFFSET/FETCH
+        // is applied to the base table only. A single-query JOIN would fan each record
+        // out by its exception count, transferring far more than `pageSize` rows and
+        // degrading a hot list endpoint against NFR-01. (Perf hardening.)
+        var query = _db.AttendanceRecords.AsNoTracking()
+            .Include(r => r.Exceptions)
+            .AsSplitQuery()
+            .AsQueryable();
 
         if (employeeId is not null) query = query.Where(r => r.EmployeeId == employeeId);
         if (fromDate is not null) query = query.Where(r => r.WorkDate >= fromDate);
@@ -112,7 +119,7 @@ public sealed class AttendanceRepository : IAttendanceRepository
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
-            .OrderByDescending(r => r.WorkDate).ThenBy(r => r.EmployeeId)
+            .OrderByDescending(r => r.WorkDate).ThenBy(r => r.EmployeeId).ThenBy(r => r.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(cancellationToken);
 

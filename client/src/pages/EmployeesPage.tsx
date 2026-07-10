@@ -66,20 +66,20 @@ export function EmployeesPage() {
 
       {canWrite && (
         <form onSubmit={onSubmit} className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <Field label="Employee No" error={formState.errors.employeeNo?.message}>
-            <input id="employeeNo" className="w-full rounded border border-slate-300 px-2 py-1" {...register('employeeNo', { required: 'Required' })} />
+          <Field id="employeeNo" label="Employee No" error={formState.errors.employeeNo?.message}>
+            <input id="employeeNo" aria-describedby={formState.errors.employeeNo ? 'employeeNo-err' : undefined} className="w-full rounded border border-slate-300 px-2 py-1" {...register('employeeNo', { required: 'Required' })} />
           </Field>
-          <Field label="First name" error={formState.errors.firstName?.message}>
-            <input id="firstName" className="w-full rounded border border-slate-300 px-2 py-1" {...register('firstName', { required: 'Required' })} />
+          <Field id="firstName" label="First name" error={formState.errors.firstName?.message}>
+            <input id="firstName" aria-describedby={formState.errors.firstName ? 'firstName-err' : undefined} className="w-full rounded border border-slate-300 px-2 py-1" {...register('firstName', { required: 'Required' })} />
           </Field>
-          <Field label="Last name" error={formState.errors.lastName?.message}>
-            <input id="lastName" className="w-full rounded border border-slate-300 px-2 py-1" {...register('lastName', { required: 'Required' })} />
+          <Field id="lastName" label="Last name" error={formState.errors.lastName?.message}>
+            <input id="lastName" aria-describedby={formState.errors.lastName ? 'lastName-err' : undefined} className="w-full rounded border border-slate-300 px-2 py-1" {...register('lastName', { required: 'Required' })} />
           </Field>
-          <Field label="Email" error={formState.errors.email?.message}>
-            <input id="email" className="w-full rounded border border-slate-300 px-2 py-1" {...register('email')} />
+          <Field id="email" label="Email" error={formState.errors.email?.message}>
+            <input id="email" aria-describedby={formState.errors.email ? 'email-err' : undefined} className="w-full rounded border border-slate-300 px-2 py-1" {...register('email')} />
           </Field>
-          <Field label="Department" error={formState.errors.primaryDepartmentId?.message}>
-            <select id="primaryDepartmentId" className="w-full rounded border border-slate-300 px-2 py-1" {...register('primaryDepartmentId', { required: 'Required' })}>
+          <Field id="primaryDepartmentId" label="Department" error={formState.errors.primaryDepartmentId?.message}>
+            <select id="primaryDepartmentId" aria-describedby={formState.errors.primaryDepartmentId ? 'primaryDepartmentId-err' : undefined} className="w-full rounded border border-slate-300 px-2 py-1" {...register('primaryDepartmentId', { required: 'Required' })}>
               <option value="">Department…</option>
               {departments?.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
@@ -102,17 +102,17 @@ export function EmployeesPage() {
 
       {data && (
         <>
-          {/* Stale/refreshing indicator while paging (08 §7). */}
-          <div className="mb-2 h-4 text-xs text-slate-400">
+          {/* Stale/refreshing indicator while paging (08 §7). Announced politely. */}
+          <div role="status" aria-live="polite" className="mb-2 h-4 text-xs text-slate-400">
             {isFetching && isPlaceholderData ? 'Refreshing…' : ''}
           </div>
           <table className={`w-full border-collapse text-left text-sm ${isPlaceholderData ? 'opacity-60' : ''}`}>
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
-                <th className="py-2">Employee No</th>
-                <th className="py-2">Name</th>
-                <th className="py-2">Email</th>
-                <th className="py-2">Status</th>
+                <th scope="col" className="py-2">Employee No</th>
+                <th scope="col" className="py-2">Name</th>
+                <th scope="col" className="py-2">Email</th>
+                <th scope="col" className="py-2">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -155,13 +155,17 @@ export function EmployeesPage() {
   );
 }
 
-/** Small labelled field wrapper — ensures every input has an associated label (08 §12). */
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+/**
+ * Small labelled field wrapper. The label is programmatically associated with its
+ * control via htmlFor/id, and the error is linked with a stable id so aria-describedby
+ * on the input announces it. (WCAG 1.3.1 / 3.3.2 / 4.1.2, 08 §12.)
+ */
+function Field({ id, label, error, children }: { id: string; label: string; error?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm text-slate-600">{label}</label>
+      <label htmlFor={id} className="block text-sm text-slate-600">{label}</label>
       {children}
-      {error && <span role="alert" className="text-xs text-red-600">{error}</span>}
+      {error && <span id={`${id}-err`} role="alert" className="text-xs text-red-600">{error}</span>}
     </div>
   );
 }

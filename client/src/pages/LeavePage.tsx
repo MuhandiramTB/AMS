@@ -67,8 +67,8 @@ export function LeavePage() {
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-2">Emp</th><th className="py-2">Type</th><th className="py-2">Dates</th>
-              <th className="py-2">Days</th><th className="py-2">Status</th><th className="py-2">Actions</th>
+              <th scope="col" className="py-2">Emp</th><th scope="col" className="py-2">Type</th><th scope="col" className="py-2">Dates</th>
+              <th scope="col" className="py-2">Days</th><th scope="col" className="py-2">Status</th><th scope="col" className="py-2">Actions</th>
             </tr>
           </thead>
           <tbody>

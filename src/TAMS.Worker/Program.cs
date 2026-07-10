@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using TAMS.Application;
 using TAMS.Application.Common.Ports;
@@ -27,4 +28,34 @@ builder.Services.AddSingleton(workerOptions);
 builder.Services.AddHostedService<DeviceSyncWorker>();
 
 var host = builder.Build();
+
+// Verify the schema is reachable before the sync loop starts. In Development we
+// migrate (dev convenience); elsewhere we only assert connectivity + that the
+// schema exists, failing fast with an actionable log rather than degrading into an
+// infinite fail-log-wait loop against a missing/unreachable database. Production
+// applies migrations via the controlled deploy step (11 §6), same as the API.
+using (var scope = host.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var startupLogger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    var db = services.GetRequiredService<TAMS.Infrastructure.Persistence.TamsDbContext>();
+    try
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            await db.Database.MigrateAsync();
+        }
+        else if (!await db.Database.CanConnectAsync())
+        {
+            throw new InvalidOperationException(
+                "Worker cannot connect to the database. Ensure it is reachable and migrated before starting the worker.");
+        }
+    }
+    catch (Exception ex)
+    {
+        startupLogger.LogCritical(ex, "Worker database readiness check failed at startup; aborting.");
+        throw;
+    }
+}
+
 host.Run();

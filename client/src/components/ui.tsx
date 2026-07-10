@@ -45,7 +45,7 @@ export function AsyncView({
   emptyText?: string;
   children: ReactNode;
 }) {
-  if (isLoading) return <p className="py-4 text-slate-500">Loading…</p>;
+  if (isLoading) return <p role="status" aria-live="polite" className="py-4 text-slate-500">Loading…</p>;
   if (isError) return <p role="alert" className="py-4 text-red-600">Failed to load. Please retry.</p>;
   if (isEmpty) return <p className="py-4 text-slate-400">{emptyText ?? 'Nothing to show yet.'}</p>;
   return <>{children}</>;

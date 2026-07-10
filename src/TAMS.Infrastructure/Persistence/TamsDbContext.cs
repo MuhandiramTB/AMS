@@ -67,19 +67,30 @@ public sealed class TamsDbContext : DbContext, IUnitOfWork
             return await base.SaveChangesAsync(cancellationToken);
         }
 
-        var captured = _auditTrailBuilder.StampAndCapture(this);
+        // Peek at whether there is anything to audit without mutating state yet;
+        // if not, a single ordinary save is atomic on its own.
+        var hasAuditableChanges = ChangeTracker.Entries()
+            .Any(e => e.Entity is TAMS.Domain.Common.Entity and not TAMS.Domain.Audit.AuditEntry
+                && e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted);
 
-        // Nothing to audit → a single ordinary save is atomic on its own.
-        if (captured.Count == 0)
+        if (!hasAuditableChanges)
         {
             return await base.SaveChangesAsync(cancellationToken);
         }
 
-        // Business data + audit rows must commit together. Use the execution
-        // strategy (retries are enabled) around one explicit transaction.
+        // Business data + audit rows must commit together. Retries are enabled
+        // (EnableRetryOnFailure), so the execution strategy may re-invoke this
+        // delegate. It MUST be idempotent across attempts: we (1) drop any audit
+        // rows a prior aborted attempt left tracked as Added, (2) re-stamp/-capture
+        // from the live change tracker each attempt, so a rolled-back attempt
+        // cannot double-write the audit trail or miscount affected rows. (BRULE-10.)
         var strategy = Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
+            DiscardTrackedAuditEntries();
+
+            var captured = _auditTrailBuilder.StampAndCapture(this);
+
             await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
 
             var affected = await base.SaveChangesAsync(cancellationToken); // assigns Ids
@@ -93,4 +104,21 @@ public sealed class TamsDbContext : DbContext, IUnitOfWork
 
     public override int SaveChanges()
         => SaveChangesAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Detaches any AuditEntry instances still tracked as Added — i.e. rows written
+    /// by an earlier transaction attempt that was rolled back — so a retry starts
+    /// from a clean slate and cannot duplicate the audit trail.
+    /// </summary>
+    private void DiscardTrackedAuditEntries()
+    {
+        var stale = ChangeTracker.Entries<AuditEntry>()
+            .Where(e => e.State == EntityState.Added)
+            .ToList();
+
+        foreach (var entry in stale)
+        {
+            entry.State = EntityState.Detached;
+        }
+    }
 }

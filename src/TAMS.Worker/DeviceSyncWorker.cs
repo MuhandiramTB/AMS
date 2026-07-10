@@ -28,6 +28,11 @@ public sealed class DeviceSyncWorker : BackgroundService
         _options = options;
     }
 
+    // Consecutive cycle-level failures (e.g. DB unreachable) → exponential, capped
+    // extra delay on top of the poll interval, so a sustained outage is retried with
+    // backoff rather than a fixed-cadence storm. Reset on any successful cycle. (NFR-09.)
+    private int _consecutiveCycleFailures;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation(
@@ -38,19 +43,45 @@ public sealed class DeviceSyncWorker : BackgroundService
             try
             {
                 await RunCycleAsync(stoppingToken);
+                _consecutiveCycleFailures = 0;
+
+                await Task.Delay(TimeSpan.FromSeconds(_options.PollIntervalSeconds), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                break; // graceful shutdown
+                break; // graceful shutdown (including cancellation during the delay)
             }
             catch (Exception ex)
             {
-                // Never let a cycle-level failure kill the loop.
-                _logger.LogError(ex, "Device sync cycle failed; will retry next interval.");
-            }
+                // Never let a cycle-level failure kill the loop; back off before retrying.
+                _consecutiveCycleFailures++;
+                var backoff = CycleBackoff();
+                _logger.LogError(ex,
+                    "Device sync cycle failed ({Count} consecutive); backing off {Backoff}s before retry.",
+                    _consecutiveCycleFailures, backoff.TotalSeconds);
 
-            await Task.Delay(TimeSpan.FromSeconds(_options.PollIntervalSeconds), stoppingToken);
+                try
+                {
+                    await Task.Delay(backoff, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
         }
+    }
+
+    /// <summary>
+    /// Poll interval plus an exponentially-growing, capped penalty scaled by the
+    /// number of consecutive cycle failures (interval·2^(n-1), capped at
+    /// MaxBackoffCycles·interval).
+    /// </summary>
+    private TimeSpan CycleBackoff()
+    {
+        var interval = _options.PollIntervalSeconds;
+        var multiplier = Math.Min(1 << Math.Min(_consecutiveCycleFailures - 1, 20), _options.MaxBackoffCycles);
+        return TimeSpan.FromSeconds(interval * Math.Max(1, multiplier));
     }
 
     // Per-device backoff: after N consecutive failures, skip the device for a
@@ -84,10 +115,16 @@ public sealed class DeviceSyncWorker : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var mediator = scope.ServiceProvider.GetRequiredService<ISender>();
 
+            // Per-device timeout: a device that connects but never returns data must
+            // not hang the whole cycle and starve the other devices. Cancel the stuck
+            // sync and treat it as a failure (backoff), then move on. (NFR-08.)
+            using var deviceCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            deviceCts.CancelAfter(TimeSpan.FromSeconds(_options.DeviceSyncTimeoutSeconds));
+
             try
             {
                 var result = await mediator.Send(
-                    new SyncDeviceCommand(deviceId, _options.UnreachableAlertThreshold), stoppingToken);
+                    new SyncDeviceCommand(deviceId, _options.UnreachableAlertThreshold), deviceCts.Token);
 
                 if (result.Reachable)
                 {
@@ -103,6 +140,20 @@ public sealed class DeviceSyncWorker : BackgroundService
                         "Device {DeviceId} unreachable (alerted: {Alerted}); backing off {Skip} cycle(s). Watermark preserved.",
                         result.DeviceId, result.Alerted, _skipCyclesRemaining.GetValueOrDefault(deviceId));
                 }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Genuine shutdown — not a device fault. Let the outer loop handle it.
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // Per-device timeout fired (deviceCts, not stoppingToken): the device
+                // hung. Treat as a failure and back off, but keep the loop moving.
+                ApplyBackoff(deviceId);
+                _logger.LogWarning(
+                    "Device {DeviceId} sync timed out after {Timeout}s; backing off {Skip} cycle(s).",
+                    deviceId, _options.DeviceSyncTimeoutSeconds, _skipCyclesRemaining.GetValueOrDefault(deviceId));
             }
             catch (Exception ex)
             {
@@ -133,4 +184,7 @@ public sealed class WorkerOptions
 
     /// <summary>Upper bound on consecutive cycles a failing device is skipped.</summary>
     public int MaxBackoffCycles { get; set; } = 10;
+
+    /// <summary>Per-device sync timeout; a hung device is cancelled after this. (NFR-08.)</summary>
+    public int DeviceSyncTimeoutSeconds { get; set; } = 60;
 }

@@ -2,6 +2,8 @@ using FluentValidation;
 using MediatR;
 using TAMS.Application.Common.Exceptions;
 using TAMS.Application.Common.Ports;
+using TAMS.Application.Common.Security;
+using TAMS.Domain.Identity;
 using TAMS.Domain.Leave;
 
 namespace TAMS.Application.Leave;
@@ -113,11 +115,22 @@ public sealed record GetLeaveBalancesQuery(long EmployeeId, short Year) : IReque
 public sealed class GetLeaveBalancesHandler : IRequestHandler<GetLeaveBalancesQuery, IReadOnlyList<LeaveBalanceDto>>
 {
     private readonly ILeaveRepository _leave;
-    public GetLeaveBalancesHandler(ILeaveRepository leave) => _leave = leave;
+    private readonly ICurrentUser _currentUser;
+
+    public GetLeaveBalancesHandler(ILeaveRepository leave, ICurrentUser currentUser)
+    {
+        _leave = leave;
+        _currentUser = currentUser;
+    }
 
     public async Task<IReadOnlyList<LeaveBalanceDto>> Handle(GetLeaveBalancesQuery request, CancellationToken cancellationToken)
     {
-        var balances = await _leave.GetBalancesForEmployeeAsync(request.EmployeeId, request.Year, cancellationToken);
+        // Server-derived scope: without LeaveReadAll a caller may only read their
+        // own balances, whatever employeeId they pass. (06 §5, OWASP A01 — IDOR.)
+        var scope = DataScope.For(_currentUser, Permissions.LeaveReadAll);
+        var employeeId = scope.ResolveEmployeeFilter(request.EmployeeId) ?? request.EmployeeId;
+
+        var balances = await _leave.GetBalancesForEmployeeAsync(employeeId, request.Year, cancellationToken);
         return balances.Select(LeaveBalanceDto.FromEntity).ToList();
     }
 }

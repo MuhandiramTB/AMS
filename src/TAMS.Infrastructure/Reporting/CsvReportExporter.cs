@@ -51,10 +51,23 @@ public sealed class CsvReportExporter : IReportExporter
     private static string Hours(int minutes) =>
         (minutes / 60m).ToString("0.00", CultureInfo.InvariantCulture);
 
-    /// <summary>Minimal CSV field escaping (quote if it contains comma/quote/newline).</summary>
+    /// <summary>
+    /// CSV field escaping with formula-injection defence (OWASP CSV injection). Any
+    /// field beginning with =, +, -, @, or a control char that Excel/Sheets treat as
+    /// a formula trigger is prefixed with a tab so it is rendered as literal text and
+    /// never executed; standard quoting handles comma/quote/newline. (06 hardening.)
+    /// </summary>
     private static string Csv(string value)
     {
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        value ??= string.Empty;
+
+        // Neutralise leading formula triggers before quoting.
+        if (value.Length > 0 && "=+-@\t\r".IndexOf(value[0]) >= 0)
+        {
+            value = "\t" + value;
+        }
+
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
         {
             return $"\"{value.Replace("\"", "\"\"")}\"";
         }

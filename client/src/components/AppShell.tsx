@@ -27,6 +27,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen flex-col">
+      {/* Skip link — first focusable element, lets keyboard users bypass the nav
+          and jump straight to page content. (WCAG 2.4.1 Bypass Blocks.) */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-20 focus:rounded focus:bg-blue-600 focus:px-3 focus:py-2 focus:text-white"
+      >
+        Skip to content
+      </a>
       <header className="flex items-center justify-between bg-slate-800 px-4 py-3 text-white">
         <span className="text-lg font-semibold">TAMS</span>
         <div className="flex items-center gap-3 text-sm">
@@ -44,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <nav className="w-56 shrink-0 bg-slate-100 p-3">
+        <nav aria-label="Primary" className="w-56 shrink-0 bg-slate-100 p-3">
           <ul className="space-y-1">
             {visible.map((item) => (
               <li key={item.to}>
@@ -66,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </ul>
         </nav>
 
-        <main className="flex-1 overflow-auto bg-white p-6">{children}</main>
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto bg-white p-6">{children}</main>
       </div>
     </div>
   );

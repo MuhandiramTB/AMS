@@ -61,7 +61,8 @@ public sealed class DatabaseSeeder
                 Permissions.AttendanceRead, Permissions.AttendanceReadAll,
                 Permissions.AttendanceWrite, Permissions.AttendanceCorrect,
                 Permissions.DeviceRead,
-                Permissions.LeaveRead, Permissions.LeaveRequest, Permissions.LeaveApprove, Permissions.LeaveManage,
+                Permissions.LeaveRead, Permissions.LeaveReadAll, Permissions.LeaveRequest,
+                Permissions.LeaveApprove, Permissions.LeaveManage,
                 Permissions.ReportRead, Permissions.ReportExport
             },
             // Manager: read capability but NOT the all-rows scope — confined to own
@@ -83,7 +84,7 @@ public sealed class DatabaseSeeder
                 Permissions.EmployeeRead, Permissions.EmployeeReadAll,
                 Permissions.DepartmentRead, Permissions.ShiftRead,
                 Permissions.AttendanceRead, Permissions.AttendanceReadAll,
-                Permissions.LeaveRead, Permissions.ReportRead, Permissions.AuditRead
+                Permissions.LeaveRead, Permissions.LeaveReadAll, Permissions.ReportRead, Permissions.AuditRead
             }
         };
 

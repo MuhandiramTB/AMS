@@ -153,11 +153,33 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
 }
 
 /// <summary>
+/// A restricted principal to impersonate in a MediatR-direct test (e.g. a plain
+/// Employee) so DataScope enforcement can be exercised. Set via
+/// <see cref="TestPrincipal.RunAs"/>.
+/// </summary>
+public sealed record TestPrincipal(long? EmployeeId, IReadOnlyCollection<string> Permissions)
+{
+    private static readonly AsyncLocal<TestPrincipal?> Current = new();
+
+    public static TestPrincipal? Override => Current.Value;
+
+    /// <summary>Runs <paramref name="action"/> with this principal in effect for the
+    /// current async flow, then restores the previous one.</summary>
+    public static async Task RunAs(TestPrincipal principal, Func<Task> action)
+    {
+        var previous = Current.Value;
+        Current.Value = principal;
+        try { await action(); }
+        finally { Current.Value = previous; }
+    }
+}
+
+/// <summary>
 /// Test principal: when an HTTP request is in flight it defers entirely to the real
 /// JWT-backed <see cref="TAMS.Api.Common.CurrentUser"/> (so HTTP auth tests are
-/// unaffected); when there is no HttpContext (MediatR-direct tests) it reports an
-/// admin-equivalent identity holding every permission, so DataScope-gated reads run
-/// as an authenticated administrator would.
+/// unaffected); otherwise it uses any <see cref="TestPrincipal"/> override set for
+/// the current async flow, and failing that reports an admin-equivalent identity
+/// holding every permission so DataScope-gated reads run as an administrator would.
 /// </summary>
 internal sealed class TestCurrentUser : TAMS.Application.Common.Ports.ICurrentUser
 {
@@ -173,11 +195,14 @@ internal sealed class TestCurrentUser : TAMS.Application.Common.Ports.ICurrentUs
     private bool HasRequest => _http.HttpContext is not null;
 
     public long? UserId => HasRequest ? _real.UserId : 1;
-    public string UserName => HasRequest ? _real.UserName : "admin";
+    public string UserName => HasRequest ? _real.UserName : "test";
     public bool IsAuthenticated => HasRequest ? _real.IsAuthenticated : true;
     public IReadOnlyCollection<string> Permissions =>
-        HasRequest ? _real.Permissions : TAMS.Domain.Identity.Permissions.All;
-    public long? EmployeeId => HasRequest ? _real.EmployeeId : null;
+        HasRequest ? _real.Permissions
+        : TestPrincipal.Override?.Permissions ?? TAMS.Domain.Identity.Permissions.All;
+    public long? EmployeeId =>
+        HasRequest ? _real.EmployeeId : TestPrincipal.Override?.EmployeeId;
     public bool HasPermission(string permission) =>
-        HasRequest ? _real.HasPermission(permission) : true;
+        HasRequest ? _real.HasPermission(permission)
+        : TestPrincipal.Override is { } p ? p.Permissions.Contains(permission) : true;
 }

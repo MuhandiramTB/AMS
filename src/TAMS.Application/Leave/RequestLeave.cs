@@ -3,6 +3,8 @@ using MediatR;
 using TAMS.Application.Common.Exceptions;
 using TAMS.Application.Common.Models;
 using TAMS.Application.Common.Ports;
+using TAMS.Application.Common.Security;
+using TAMS.Domain.Identity;
 using TAMS.Domain.Leave;
 
 namespace TAMS.Application.Leave;
@@ -28,16 +30,34 @@ public sealed class RequestLeaveHandler : IRequestHandler<RequestLeaveCommand, L
     private readonly ILeaveRepository _leave;
     private readonly IEmployeeRepository _employees;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICurrentUser _currentUser;
 
-    public RequestLeaveHandler(ILeaveRepository leave, IEmployeeRepository employees, IUnitOfWork unitOfWork)
+    public RequestLeaveHandler(
+        ILeaveRepository leave, IEmployeeRepository employees, IUnitOfWork unitOfWork, ICurrentUser currentUser)
     {
         _leave = leave;
         _employees = employees;
         _unitOfWork = unitOfWork;
+        _currentUser = currentUser;
     }
 
     public async Task<LeaveRequestDto> Handle(RequestLeaveCommand request, CancellationToken cancellationToken)
     {
+        // A caller without LeaveManage (i.e. not HR/Admin) may only file leave for
+        // their OWN linked employee — the body EmployeeId cannot be used to submit
+        // on someone else's behalf. (06 §5, OWASP A01 — broken access control.)
+        if (!_currentUser.HasPermission(Permissions.LeaveManage))
+        {
+            if (_currentUser.EmployeeId is null)
+            {
+                throw new ForbiddenException("Your account is not linked to an employee record.");
+            }
+            if (request.EmployeeId != _currentUser.EmployeeId)
+            {
+                throw new ForbiddenException("You may only submit leave for yourself.");
+            }
+        }
+
         if (await _employees.GetByIdAsync(request.EmployeeId, cancellationToken) is null)
         {
             throw new BusinessRuleException($"Employee '{request.EmployeeId}' does not exist.");
@@ -72,12 +92,23 @@ public sealed class GetLeaveRequestsValidator : AbstractValidator<GetLeaveReques
 public sealed class GetLeaveRequestsHandler : IRequestHandler<GetLeaveRequestsQuery, PagedResult<LeaveRequestDto>>
 {
     private readonly ILeaveRepository _leave;
-    public GetLeaveRequestsHandler(ILeaveRepository leave) => _leave = leave;
+    private readonly ICurrentUser _currentUser;
+
+    public GetLeaveRequestsHandler(ILeaveRepository leave, ICurrentUser currentUser)
+    {
+        _leave = leave;
+        _currentUser = currentUser;
+    }
 
     public async Task<PagedResult<LeaveRequestDto>> Handle(GetLeaveRequestsQuery request, CancellationToken cancellationToken)
     {
+        // Server-derived scope: without LeaveReadAll a caller only sees their own
+        // requests, whatever employeeId they pass. (06 §5, OWASP A01 — IDOR.)
+        var scope = DataScope.For(_currentUser, Permissions.LeaveReadAll);
+        var employeeFilter = scope.ResolveEmployeeFilter(request.EmployeeId);
+
         var (items, total) = await _leave.GetRequestsPagedAsync(
-            request.Page, request.PageSize, request.EmployeeId, request.Status, cancellationToken);
+            request.Page, request.PageSize, employeeFilter, request.Status, cancellationToken);
         return new PagedResult<LeaveRequestDto>(
             items.Select(LeaveRequestDto.FromEntity).ToList(), request.Page, request.PageSize, total);
     }

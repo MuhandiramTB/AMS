@@ -14,13 +14,28 @@ public sealed class GetAttendanceRecordByIdHandler
     : IRequestHandler<GetAttendanceRecordByIdQuery, AttendanceRecordDto>
 {
     private readonly IAttendanceRepository _attendance;
+    private readonly ICurrentUser _currentUser;
 
-    public GetAttendanceRecordByIdHandler(IAttendanceRepository attendance) => _attendance = attendance;
+    public GetAttendanceRecordByIdHandler(IAttendanceRepository attendance, ICurrentUser currentUser)
+    {
+        _attendance = attendance;
+        _currentUser = currentUser;
+    }
 
     public async Task<AttendanceRecordDto> Handle(GetAttendanceRecordByIdQuery request, CancellationToken cancellationToken)
     {
         var record = await _attendance.GetRecordByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException("AttendanceRecord", request.Id);
+
+        // Server-derived scope: a restricted caller (no AttendanceReadAll) may only
+        // read their OWN record. Report not-found rather than forbidden so an id
+        // cannot be probed for existence. (06 §5, OWASP A01 — IDOR.)
+        var scope = DataScope.For(_currentUser, Permissions.AttendanceReadAll);
+        if (!scope.IsUnrestricted && record.EmployeeId != scope.EmployeeId)
+        {
+            throw new NotFoundException("AttendanceRecord", request.Id);
+        }
+
         return AttendanceRecordDto.FromEntity(record);
     }
 }

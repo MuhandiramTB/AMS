@@ -33,8 +33,8 @@ export function ShiftsPage() {
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-2">Code</th><th className="py-2">Name</th><th className="py-2">Window</th>
-              <th className="py-2">Break</th><th className="py-2">Grace</th><th className="py-2">Type</th>
+              <th scope="col" className="py-2">Code</th><th scope="col" className="py-2">Name</th><th scope="col" className="py-2">Window</th>
+              <th scope="col" className="py-2">Break</th><th scope="col" className="py-2">Grace</th><th scope="col" className="py-2">Type</th>
             </tr>
           </thead>
           <tbody>
@@ -90,8 +90,8 @@ function CreateShiftForm({ onDone }: { onDone: (m: string) => void }) {
       <h2 className="mb-3 font-medium text-slate-800">New shift</h2>
       <p className="mb-2 text-xs text-slate-500">Set end earlier than start for an overnight shift.</p>
       <div className="grid grid-cols-2 gap-2">
-        <input placeholder="Code" className="rounded border border-slate-300 px-2 py-1" {...register('code', { required: true })} />
-        <input placeholder="Name" className="rounded border border-slate-300 px-2 py-1" {...register('name', { required: true })} />
+        <input aria-label="Shift code" placeholder="Code" className="rounded border border-slate-300 px-2 py-1" {...register('code', { required: true })} />
+        <input aria-label="Shift name" placeholder="Name" className="rounded border border-slate-300 px-2 py-1" {...register('name', { required: true })} />
         <label className="text-xs text-slate-600">Start<input type="time" className="w-full rounded border border-slate-300 px-2 py-1" {...register('startTime', { required: true })} /></label>
         <label className="text-xs text-slate-600">End<input type="time" className="w-full rounded border border-slate-300 px-2 py-1" {...register('endTime', { required: true })} /></label>
         <label className="text-xs text-slate-600">Break (m)<input type="number" className="w-full rounded border border-slate-300 px-2 py-1" {...register('breakMinutes')} /></label>
@@ -141,15 +141,15 @@ function AssignShiftForm({ onDone }: { onDone: (m: string) => void }) {
     <form onSubmit={onSubmit} className="rounded border border-slate-200 p-4">
       <h2 className="mb-3 font-medium text-slate-800">Assign shift (effective-dated)</h2>
       <div className="grid grid-cols-2 gap-2">
-        <select className="rounded border border-slate-300 px-2 py-1" {...register('shiftId', { required: true })}>
+        <select aria-label="Shift" className="rounded border border-slate-300 px-2 py-1" {...register('shiftId', { required: true })}>
           <option value="">Shift…</option>
           {shifts.data?.map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
         </select>
-        <select className="rounded border border-slate-300 px-2 py-1" {...register('target')}>
+        <select aria-label="Assign to" className="rounded border border-slate-300 px-2 py-1" {...register('target')}>
           <option value="employee">Employee</option>
           <option value="department">Department</option>
         </select>
-        <input placeholder={target === 'employee' ? 'Employee ID' : 'Department ID'} type="number" className="rounded border border-slate-300 px-2 py-1" {...register('targetId', { required: true })} />
+        <input aria-label={target === 'employee' ? 'Employee ID' : 'Department ID'} placeholder={target === 'employee' ? 'Employee ID' : 'Department ID'} type="number" className="rounded border border-slate-300 px-2 py-1" {...register('targetId', { required: true })} />
         <label className="text-xs text-slate-600">Effective from<input type="date" className="w-full rounded border border-slate-300 px-2 py-1" {...register('effectiveFrom', { required: true })} /></label>
       </div>
       <div className="mt-3">
