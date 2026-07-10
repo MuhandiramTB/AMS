@@ -40,6 +40,10 @@ public static class Permissions
     public const string DeviceRead = "Device.Read";
     public const string DeviceManage = "Device.Manage";
 
+    // Reporting
+    public const string ReportRead = "Report.Read";
+    public const string ReportExport = "Report.Export";
+
     // Administration
     public const string UserManage = "User.Manage";
     public const string RoleManage = "Role.Manage";
@@ -66,6 +70,8 @@ public static class Permissions
         LeaveManage,
         DeviceRead,
         DeviceManage,
+        ReportRead,
+        ReportExport,
         UserManage,
         RoleManage,
         AuditRead

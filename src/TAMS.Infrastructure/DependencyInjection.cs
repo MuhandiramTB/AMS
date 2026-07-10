@@ -50,6 +50,9 @@ public static class DependencyInjection
         services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
         services.AddScoped<ILeaveRepository, LeaveRepository>();
+        services.AddScoped<IReportingRepository, ReportingRepository>();
+        services.AddScoped<IAuditWriter, AuditWriter>();
+        services.AddSingleton<IReportExporter, Reporting.CsvReportExporter>();
 
         // ZKTeco device gateway. The simulator is a singleton so its in-memory
         // device buffers persist across request scopes (dev/test). The real SDK

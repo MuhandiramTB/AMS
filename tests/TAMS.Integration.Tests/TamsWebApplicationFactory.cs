@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,16 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // MediatR-direct tests have no HTTP request, so the real HttpContext-backed
+        // CurrentUser resolves to an anonymous principal with no permissions. Replace
+        // it with a principal that defers to the real HttpContext when one exists
+        // (HTTP-driven auth tests still exercise the true bearer principal) and falls
+        // back to an admin-equivalent identity only when there is no request context.
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddScoped<TAMS.Application.Common.Ports.ICurrentUser, TestCurrentUser>();
+        });
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
@@ -139,4 +150,34 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
 
         base.Dispose(disposing);
     }
+}
+
+/// <summary>
+/// Test principal: when an HTTP request is in flight it defers entirely to the real
+/// JWT-backed <see cref="TAMS.Api.Common.CurrentUser"/> (so HTTP auth tests are
+/// unaffected); when there is no HttpContext (MediatR-direct tests) it reports an
+/// admin-equivalent identity holding every permission, so DataScope-gated reads run
+/// as an authenticated administrator would.
+/// </summary>
+internal sealed class TestCurrentUser : TAMS.Application.Common.Ports.ICurrentUser
+{
+    private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor _http;
+    private readonly TAMS.Api.Common.CurrentUser _real;
+
+    public TestCurrentUser(Microsoft.AspNetCore.Http.IHttpContextAccessor http)
+    {
+        _http = http;
+        _real = new TAMS.Api.Common.CurrentUser(http);
+    }
+
+    private bool HasRequest => _http.HttpContext is not null;
+
+    public long? UserId => HasRequest ? _real.UserId : 1;
+    public string UserName => HasRequest ? _real.UserName : "admin";
+    public bool IsAuthenticated => HasRequest ? _real.IsAuthenticated : true;
+    public IReadOnlyCollection<string> Permissions =>
+        HasRequest ? _real.Permissions : TAMS.Domain.Identity.Permissions.All;
+    public long? EmployeeId => HasRequest ? _real.EmployeeId : null;
+    public bool HasPermission(string permission) =>
+        HasRequest ? _real.HasPermission(permission) : true;
 }
