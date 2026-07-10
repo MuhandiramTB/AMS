@@ -1,0 +1,31 @@
+# TAMS — root EditorConfig (07_CODING_STANDARDS.md §2)
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{cs,csx}]
+indent_size = 4
+# Naming & style essentials
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:warning
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_style_qualification_for_field = false:warning
+csharp_prefer_braces = true:suggestion
+dotnet_style_prefer_conditional_expression_over_return = true:suggestion
+
+# Async safety (§6) — flag blocking waits where analyzers support it
+dotnet_diagnostic.CA2007.severity = none
+
+[*.{ts,tsx,js,jsx,json,css,html}]
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

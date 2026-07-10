@@ -1,0 +1,27 @@
+# .NET
+bin/
+obj/
+*.user
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.log
+
+# Rider/VS
+.idea/
+.vs/
+
+# Node / React
+node_modules/
+client/dist/
+client/.vite/
+
+# Env & secrets (06_SECURITY.md §9 — never commit secrets)
+.env
+.env.*
+appsettings.*.local.json
+*.pfx
+
+# OS
+Thumbs.db
+.DS_Store

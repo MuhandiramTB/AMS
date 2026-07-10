@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Solution-wide build settings enforcing 07_CODING_STANDARDS.md:
+    - Nullable reference types ON and treated as errors (§3.2)
+    - Implicit usings, latest C#
+    - Warnings as errors in CI-critical categories
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Nullable warnings are errors (CS86xx) -->
+    <WarningsAsErrors>nullable</WarningsAsErrors>
+  </PropertyGroup>
+</Project>
