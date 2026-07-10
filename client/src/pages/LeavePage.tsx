@@ -21,10 +21,15 @@ import {
   PageHeader,
   Select,
   StatusPill,
-  TableWrap,
+  DataTable,
   Td,
   Th,
+  Tr,
+  Toolbar,
+  Pagination,
+  DEFAULT_PAGE_SIZE,
 } from '../components/ui';
+import { useDebounced } from '../lib/useDebounced';
 import type { LeaveRequest } from '../api/types';
 
 function statusPill(status: string) {
@@ -50,17 +55,22 @@ export function LeavePage() {
 
   const [page, setPage] = useState(1);
   const [employeeId, setEmployeeId] = useState('');
-  const filters = employeeId ? { employeeId: Number(employeeId) } : {};
-  const requests = useLeaveRequests(page, 15, filters);
+  const [status, setStatus] = useState('');
+  const debouncedEmp = useDebounced(employeeId);
+  const filters = {
+    ...(debouncedEmp ? { employeeId: Number(debouncedEmp) } : {}),
+    ...(status ? { status } : {}),
+  };
+  const requests = useLeaveRequests(page, DEFAULT_PAGE_SIZE, filters);
   const [message, setMessage] = useState<string | null>(null);
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader title="Leave" subtitle="Request time off and manage leave requests." />
 
       {message && (
         <p
-          className="mb-4 rounded-[var(--radius-md)] bg-[var(--color-surface-2)] px-4 py-3 text-sm text-[var(--color-ink-soft)]"
+          className="rounded-[var(--radius-md)] bg-[var(--color-surface-2)] px-4 py-3 text-sm text-[var(--color-ink-soft)]"
           role="status"
         >
           {message}
@@ -69,22 +79,32 @@ export function LeavePage() {
 
       {canRequest && <RequestLeaveForm onDone={setMessage} />}
 
-      <Card className="mb-6" pad>
-        <div className="flex flex-wrap items-end gap-4">
-          <Field id="empFilter" label="Filter by Employee ID" className="w-48">
-            <Input
-              id="empFilter"
-              value={employeeId}
-              onChange={(e) => {
-                setEmployeeId(e.target.value);
-                setPage(1);
-              }}
-              placeholder="all"
-            />
-          </Field>
-          {employeeId && <BalancesPanel employeeId={Number(employeeId)} />}
-        </div>
-      </Card>
+      {/* Filter section */}
+      <Toolbar>
+        <Field id="empFilter" label="Filter by Employee ID" className="w-48">
+          <Input
+            id="empFilter"
+            value={employeeId}
+            onChange={(e) => { setEmployeeId(e.target.value); setPage(1); }}
+            placeholder="All employees"
+            inputMode="numeric"
+          />
+        </Field>
+        <Field id="statusFilter" label="Status" className="w-44">
+          <Select id="statusFilter" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+            <option value="">All statuses</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Approved">Approved</option>
+            <option value="Applied">Applied</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Cancelled">Cancelled</option>
+          </Select>
+        </Field>
+        {(employeeId || status) && (
+          <Button onClick={() => { setEmployeeId(''); setStatus(''); setPage(1); }}>Clear</Button>
+        )}
+        {employeeId && <div className="flex-1 pb-1"><BalancesPanel employeeId={Number(employeeId)} /></div>}
+      </Toolbar>
 
       <AsyncView
         isLoading={requests.isLoading}
@@ -92,37 +112,26 @@ export function LeavePage() {
         isEmpty={requests.data?.items.length === 0}
         emptyText="No leave requests for this filter."
       >
-        <TableWrap>
-          <thead>
+        <DataTable
+          head={
             <tr>
-              <Th>Emp</Th>
-              <Th>Type</Th>
-              <Th>Dates</Th>
-              <Th num>Days</Th>
-              <Th>Status</Th>
-              <Th>Actions</Th>
+              <Th module="leave">Emp</Th>
+              <Th module="leave">Type</Th>
+              <Th module="leave">Dates</Th>
+              <Th module="leave" num>Days</Th>
+              <Th module="leave">Status</Th>
+              <Th module="leave">Actions</Th>
             </tr>
-          </thead>
-          <tbody>
-            {requests.data?.items.map((r) => (
-              <LeaveRow key={r.id} req={r} canApprove={canApprove} canRequest={canRequest} onMessage={setMessage} />
-            ))}
-          </tbody>
-        </TableWrap>
+          }
+        >
+          {requests.data?.items.map((r) => (
+            <LeaveRow key={r.id} req={r} canApprove={canApprove} canRequest={canRequest} onMessage={setMessage} />
+          ))}
+        </DataTable>
       </AsyncView>
 
       {requests.data && (
-        <div className="mt-4 flex items-center gap-3 text-sm">
-          <Button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Prev
-          </Button>
-          <span className="text-[var(--color-muted)]">
-            Page {requests.data.page} of {requests.data.totalPages || 1}
-          </span>
-          <Button disabled={page >= requests.data.totalPages} onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
-        </div>
+        <Pagination page={requests.data.page} totalPages={requests.data.totalPages} onPage={setPage} />
       )}
     </div>
   );
@@ -156,7 +165,7 @@ function LeaveRow({
   const active = req.status === 'Submitted' || req.status === 'Approved' || req.status === 'Applied';
 
   return (
-    <tr className="border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)]">
+    <Tr>
       <Td>{req.employeeId}</Td>
       <Td>{req.leaveTypeId}</Td>
       <Td>
@@ -197,7 +206,7 @@ function LeaveRow({
           )}
         </div>
       </Td>
-    </tr>
+    </Tr>
   );
 }
 

@@ -3,7 +3,11 @@ import { useForm } from 'react-hook-form';
 import { useAttendanceRecords, useCorrectAttendance } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { AsyncView, Button, Card, Field, PageHeader, StatusPill, TableWrap, Td, Textarea, Th } from '../components/ui';
+import {
+  AsyncView, Button, Field, Input, PageHeader, StatusPill, Textarea,
+  DataTable, Th, Td, Tr, Toolbar, Pagination, DEFAULT_PAGE_SIZE,
+} from '../components/ui';
+import { useDebounced } from '../lib/useDebounced';
 import type { AttendanceRecord } from '../api/types';
 
 function statusPill(status: string) {
@@ -36,30 +40,51 @@ export function AttendancePage() {
   const canCorrect = hasPermission('Attendance.Correct');
   const [page, setPage] = useState(1);
   const [employeeId, setEmployeeId] = useState<string>('');
-  const filters = employeeId ? { employeeId: Number(employeeId) } : {};
-  const records = useAttendanceRecords(page, 15, filters);
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const debouncedEmp = useDebounced(employeeId);
+
+  const filters = {
+    ...(debouncedEmp ? { employeeId: Number(debouncedEmp) } : {}),
+    ...(fromDate ? { fromDate } : {}),
+    ...(toDate ? { toDate } : {}),
+  };
+  const records = useAttendanceRecords(page, DEFAULT_PAGE_SIZE, filters);
   const [editing, setEditing] = useState<AttendanceRecord | null>(null);
 
+  const resetTo1 = () => setPage(1);
+
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
         title="Attendance"
         subtitle="Daily attendance records, exceptions, and corrections."
       />
 
-      <Card className="mb-5" pad>
-        <div className="flex flex-wrap items-end gap-4">
-          <Field id="empFilter" label="Employee ID" className="w-48" hint="Leave blank for all">
-            <input
-              id="empFilter"
-              className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-muted-soft)] transition-colors focus:border-[var(--color-brand-600)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-600)]/20"
-              value={employeeId}
-              onChange={(e) => { setEmployeeId(e.target.value); setPage(1); }}
-              placeholder="all"
-            />
-          </Field>
+      {/* Filter section */}
+      <Toolbar>
+        <Field id="empFilter" label="Employee ID" className="w-40">
+          <Input
+            id="empFilter"
+            value={employeeId}
+            onChange={(e) => { setEmployeeId(e.target.value); resetTo1(); }}
+            placeholder="All employees"
+            inputMode="numeric"
+          />
+        </Field>
+        <Field id="fromDate" label="From" className="w-44">
+          <Input id="fromDate" type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); resetTo1(); }} />
+        </Field>
+        <Field id="toDate" label="To" className="w-44">
+          <Input id="toDate" type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); resetTo1(); }} />
+        </Field>
+        {(employeeId || fromDate || toDate) && (
+          <Button onClick={() => { setEmployeeId(''); setFromDate(''); setToDate(''); resetTo1(); }}>Clear</Button>
+        )}
+        <div role="status" aria-live="polite" className="pb-2 text-xs text-[var(--color-muted-soft)]">
+          {records.isFetching && records.isPlaceholderData ? 'Refreshing…' : ''}
         </div>
-      </Card>
+      </Toolbar>
 
       <AsyncView
         isLoading={records.isLoading}
@@ -67,46 +92,42 @@ export function AttendancePage() {
         isEmpty={records.data?.items.length === 0}
         emptyText="No attendance records for this filter."
       >
-        <TableWrap className={records.isPlaceholderData ? 'opacity-60' : ''}>
-          <thead>
+        <DataTable
+          className={records.isPlaceholderData ? 'opacity-60' : ''}
+          head={
             <tr>
-              <Th>Emp</Th>
-              <Th>Date</Th>
-              <Th>In</Th>
-              <Th>Out</Th>
-              <Th>Worked</Th>
-              <Th num>Late</Th>
-              <Th num>OT</Th>
-              <Th>Status</Th>
-              <Th><span className="sr-only">Actions</span></Th>
+              <Th module="attendance">Emp</Th>
+              <Th module="attendance">Date</Th>
+              <Th module="attendance">In</Th>
+              <Th module="attendance">Out</Th>
+              <Th module="attendance">Worked</Th>
+              <Th module="attendance" num>Late</Th>
+              <Th module="attendance" num>OT</Th>
+              <Th module="attendance">Status</Th>
+              <Th module="attendance"><span className="sr-only">Actions</span></Th>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--color-line-soft)]">
-            {records.data?.items.map((r) => (
-              <tr key={r.id} className="transition-colors hover:bg-[var(--color-surface-2)]">
-                <Td>{r.employeeId}</Td>
-                <Td>{r.workDate}</Td>
-                <Td>{fmt(r.firstInUtc)}</Td>
-                <Td>{fmt(r.lastOutUtc)}</Td>
-                <Td>{mins(r.workedMinutes)}</Td>
-                <Td num>{r.lateMinutes ? `${r.lateMinutes}m` : '—'}</Td>
-                <Td num>{r.overtimeMinutes ? `${r.overtimeMinutes}m` : '—'}</Td>
-                <Td>{statusPill(r.status)}</Td>
-                <Td className="text-right">
-                  {canCorrect && <Button size="sm" onClick={() => setEditing(r)}>Review</Button>}
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
+          }
+        >
+          {records.data?.items.map((r) => (
+            <Tr key={r.id}>
+              <Td>{r.employeeId}</Td>
+              <Td>{r.workDate}</Td>
+              <Td>{fmt(r.firstInUtc)}</Td>
+              <Td>{fmt(r.lastOutUtc)}</Td>
+              <Td>{mins(r.workedMinutes)}</Td>
+              <Td num>{r.lateMinutes ? `${r.lateMinutes}m` : '—'}</Td>
+              <Td num>{r.overtimeMinutes ? `${r.overtimeMinutes}m` : '—'}</Td>
+              <Td>{statusPill(r.status)}</Td>
+              <Td className="text-right">
+                {canCorrect && <Button size="sm" onClick={() => setEditing(r)}>Review</Button>}
+              </Td>
+            </Tr>
+          ))}
+        </DataTable>
       </AsyncView>
 
       {records.data && (
-        <div className="mt-4 flex items-center gap-3 text-sm">
-          <Button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-          <span className="text-[var(--color-muted)]">Page {records.data.page} of {records.data.totalPages || 1}</span>
-          <Button disabled={page >= records.data.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-        </div>
+        <Pagination page={records.data.page} totalPages={records.data.totalPages} onPage={setPage} />
       )}
 
       {editing && <CorrectionDrawer record={editing} onClose={() => setEditing(null)} />}

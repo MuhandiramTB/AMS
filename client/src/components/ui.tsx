@@ -190,8 +190,24 @@ export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HT
 }
 
 /* --------------------------------------------------------------------------
-   Table primitives — consistent, scrollable, sticky-header data tables
+   Table system — the shared, maintainable way every list page renders data.
+
+   • Each module gets a DISTINCT header colour via the `module` prop (tokens in
+     index.css: --hdr-<module>-bg / -fg). Pass the same module to <DataTable> and
+     it flows to the header automatically.
+   • DataTable pins the header + toolbar and scrolls ONLY the rows inside a
+     fixed-height body (maxBodyHeight, default ~20 rows). Pagination sits below,
+     always visible.
+   • Low-level <TableWrap>/<Th>/<Td> remain for bespoke tables (e.g. dashboard).
    -------------------------------------------------------------------------- */
+
+export type TableModule = 'employees' | 'departments' | 'attendance' | 'shifts' | 'leave' | 'devices' | 'default';
+
+function headerStyle(module: TableModule): { background: string; color: string } {
+  if (module === 'default') return { background: 'var(--color-surface-2)', color: 'var(--color-muted)' };
+  return { background: `var(--hdr-${module}-bg)`, color: `var(--hdr-${module}-fg)` };
+}
+
 export function TableWrap({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <div className={`overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] ${className}`}>
@@ -199,15 +215,133 @@ export function TableWrap({ children, className = '' }: { children: ReactNode; c
     </div>
   );
 }
-export function Th({ children, className = '', num = false }: { children?: ReactNode; className?: string; num?: boolean }) {
+
+export function Th({ children, className = '', num = false, module = 'default' }: { children?: ReactNode; className?: string; num?: boolean; module?: TableModule }) {
   return (
-    <th scope="col" className={`sticky top-0 z-10 bg-[var(--color-surface-2)] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] ${num ? 'text-right tabular' : ''} ${className}`}>
+    <th
+      scope="col"
+      style={headerStyle(module)}
+      className={`sticky top-0 z-10 px-4 py-3 text-xs font-semibold uppercase tracking-wide ${num ? 'text-right tabular' : ''} ${className}`}
+    >
       {children}
     </th>
   );
 }
+
 export function Td({ children, className = '', num = false }: { children?: ReactNode; className?: string; num?: boolean }) {
   return <td className={`px-4 py-3 align-middle text-[var(--color-ink-soft)] ${num ? 'text-right tabular' : ''} ${className}`}>{children}</td>;
+}
+
+/**
+ * DataTable — the standard list table. Header row is coloured per `module`,
+ * stays sticky; only the rows scroll (fixed-height body). Provide the header
+ * cells via `head` and the rows via `children`.
+ */
+export function DataTable({
+  head,
+  children,
+  maxBodyHeight = '60vh',
+  className = '',
+}: {
+  head: ReactNode;       // a <tr> of <Th module={module}> cells
+  children: ReactNode;   // the <tr> rows
+  maxBodyHeight?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] ${className}`}>
+      <div className="overflow-auto" style={{ maxHeight: maxBodyHeight }}>
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>{head}</thead>
+          <tbody>{children}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** A standard table row with hover + bottom divider. */
+export function Tr({ children, className = '', selected = false }: { children: ReactNode; className?: string; selected?: boolean }) {
+  return (
+    <tr className={`border-t border-[var(--color-line-soft)] transition-colors ${selected ? 'bg-[var(--color-brand-50)]' : 'hover:bg-[var(--color-surface-2)]'} ${className}`}>
+      {children}
+    </tr>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   Toolbar + Search + Filters — the standard filter section above a table.
+   -------------------------------------------------------------------------- */
+
+/** A filter/search bar shell that sits above a DataTable. */
+export function Toolbar({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`flex flex-wrap items-end gap-3 rounded-[var(--radius-lg)] border border-[var(--color-line)] bg-[var(--color-surface)] p-3.5 shadow-[var(--shadow-card)] ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+/** Search box with a magnifier icon and a clear button. Controlled. */
+export function SearchInput({
+  value, onChange, placeholder = 'Search…', label = 'Search', className = '',
+}: {
+  value: string; onChange: (v: string) => void; placeholder?: string; label?: string; className?: string;
+}) {
+  const id = `search-${label.replace(/\s+/g, '-').toLowerCase()}`;
+  return (
+    <div className={`min-w-56 flex-1 ${className}`}>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">{label}</label>
+      <div className="relative">
+        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--color-muted-soft)]" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" strokeLinecap="round" /></svg>
+        </span>
+        <input
+          id={id}
+          type="search"
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${CONTROL} pl-9 ${value ? 'pr-9' : ''}`}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            aria-label="Clear search"
+            className="absolute inset-y-0 right-0 flex items-center pr-3 text-[var(--color-muted-soft)] hover:text-[var(--color-ink)]"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   Pagination — shared, always-visible pager. Default page size lives here.
+   -------------------------------------------------------------------------- */
+export const DEFAULT_PAGE_SIZE = 20;
+
+export function Pagination({
+  page, totalPages, totalCount, onPage,
+}: {
+  page: number; totalPages: number; totalCount?: number; onPage: (p: number) => void;
+}) {
+  const pages = Math.max(totalPages, 1);
+  return (
+    <nav className="flex flex-wrap items-center justify-between gap-3 pt-1 text-sm" aria-label="Pagination">
+      <span className="text-[var(--color-muted)]">
+        Page <span className="font-semibold text-[var(--color-ink-soft)]">{page}</span> of {pages}
+        {typeof totalCount === 'number' && <span className="text-[var(--color-muted-soft)]"> · {totalCount} total</span>}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>Prev</Button>
+        <Button size="sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next</Button>
+      </div>
+    </nav>
+  );
 }
 
 /* --------------------------------------------------------------------------

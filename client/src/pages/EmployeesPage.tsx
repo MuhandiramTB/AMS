@@ -3,7 +3,11 @@ import { useForm } from 'react-hook-form';
 import { useCreateEmployee, useDepartments, useEmployees, type CreateEmployeeInput } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Button, Card, Field, Input, Select, PageHeader, TableWrap, Th, Td, EmptyState, useToast } from '../components/ui';
+import { useDebounced } from '../lib/useDebounced';
+import {
+  Button, Card, Field, Input, Select, PageHeader, DataTable, Th, Td, Tr,
+  Toolbar, SearchInput, Pagination, EmptyState, DEFAULT_PAGE_SIZE, useToast,
+} from '../components/ui';
 
 const FIELD_NAMES: (keyof CreateEmployeeInput)[] = ['employeeNo', 'firstName', 'lastName', 'email', 'primaryDepartmentId'];
 
@@ -16,15 +20,24 @@ function toFormField(serverKey: string): keyof CreateEmployeeInput | null {
 export function EmployeesPage() {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission('Employee.Write');
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
 
-  const { data, isLoading, isError, isFetching, isPlaceholderData } = useEmployees(page, pageSize);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const debouncedSearch = useDebounced(search);
+
   const { data: departments } = useDepartments();
+  const { data, isLoading, isError, isFetching, isPlaceholderData } = useEmployees(
+    page, DEFAULT_PAGE_SIZE, deptFilter ? Number(deptFilter) : undefined, debouncedSearch,
+  );
   const createEmployee = useCreateEmployee();
   const { register, handleSubmit, reset, setError, formState } = useForm<CreateEmployeeInput>();
   const [formError, setFormError] = useState<string | null>(null);
   const toast = useToast();
+
+  // Any filter change returns to page 1.
+  const changeSearch = (v: string) => { setSearch(v); setPage(1); };
+  const changeDept = (v: string) => { setDeptFilter(v); setPage(1); };
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
@@ -54,7 +67,7 @@ export function EmployeesPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader title="Employees" subtitle="Manage your workforce records." />
 
       {canWrite && (
@@ -88,6 +101,20 @@ export function EmployeesPage() {
         </Card>
       )}
 
+      {/* Filter section */}
+      <Toolbar>
+        <SearchInput value={search} onChange={changeSearch} label="Search employees" placeholder="Name or employee no…" />
+        <Field id="empDeptFilter" label="Filter by department" className="min-w-48">
+          <Select id="empDeptFilter" value={deptFilter} onChange={(e) => changeDept(e.target.value)}>
+            <option value="">All departments</option>
+            {departments?.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Select>
+        </Field>
+        <div role="status" aria-live="polite" className="pb-2 text-xs text-[var(--color-muted-soft)]">
+          {isFetching && isPlaceholderData ? 'Refreshing…' : ''}
+        </div>
+      </Toolbar>
+
       {isError && <p role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-absent-bg)] px-4 py-3 text-sm font-medium text-[var(--color-absent)]">Failed to load employees.</p>}
 
       {isLoading && (
@@ -99,41 +126,32 @@ export function EmployeesPage() {
 
       {data && (
         <div className="space-y-3">
-          <div role="status" aria-live="polite" className="h-4 text-xs text-[var(--color-muted-soft)]">
-            {isFetching && isPlaceholderData ? 'Refreshing…' : ''}
-          </div>
           {data.items.length === 0 ? (
-            <EmptyState title="No employees yet." hint={canWrite ? 'Add your first employee using the form above.' : undefined} />
+            <EmptyState title="No employees yet." hint={search || deptFilter ? 'Try clearing the search or filter.' : canWrite ? 'Add your first employee using the form above.' : undefined} />
           ) : (
-            <TableWrap className={isPlaceholderData ? 'opacity-60' : ''}>
-              <thead>
+            <DataTable
+              className={isPlaceholderData ? 'opacity-60' : ''}
+              head={
                 <tr>
-                  <Th>Employee No</Th>
-                  <Th>Name</Th>
-                  <Th>Email</Th>
-                  <Th>Status</Th>
+                  <Th module="employees">Employee No</Th>
+                  <Th module="employees">Name</Th>
+                  <Th module="employees">Email</Th>
+                  <Th module="employees">Status</Th>
                 </tr>
-              </thead>
-              <tbody>
-                {data.items.map((e) => (
-                  <tr key={e.id} className="border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)]">
-                    <Td className="font-mono font-medium text-[var(--color-ink)]">{e.employeeNo}</Td>
-                    <Td>{e.firstName} {e.lastName}</Td>
-                    <Td className="text-[var(--color-muted)]">{e.email ?? '—'}</Td>
-                    <Td>{e.status}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableWrap>
+              }
+            >
+              {data.items.map((e) => (
+                <Tr key={e.id}>
+                  <Td className="font-mono font-medium text-[var(--color-ink)]">{e.employeeNo}</Td>
+                  <Td>{e.firstName} {e.lastName}</Td>
+                  <Td className="text-[var(--color-muted)]">{e.email ?? '—'}</Td>
+                  <Td>{e.status}</Td>
+                </Tr>
+              ))}
+            </DataTable>
           )}
 
-          <div className="flex items-center gap-3 text-sm">
-            <Button size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-            <span className="text-[var(--color-muted)]">
-              Page {data.page} of {data.totalPages || 1} <span className="text-[var(--color-muted-soft)]">({data.totalCount} total)</span>
-            </span>
-            <Button size="sm" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-          </div>
+          <Pagination page={data.page} totalPages={data.totalPages} totalCount={data.totalCount} onPage={setPage} />
         </div>
       )}
     </div>

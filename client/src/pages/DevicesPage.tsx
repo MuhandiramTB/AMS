@@ -18,13 +18,16 @@ import {
   AsyncView,
   Button,
   Card,
+  DataTable,
   Field,
   Input,
   PageHeader,
+  SearchInput,
   StatusPill,
-  TableWrap,
   Td,
   Th,
+  Toolbar,
+  Tr,
 } from '../components/ui';
 import type { Device } from '../api/types';
 
@@ -51,6 +54,16 @@ export function DevicesPage() {
   const devices = useDevices();
   const [message, setMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<Device | null>(null);
+  const [query, setQuery] = useState('');
+
+  const q = query.trim().toLowerCase();
+  const filtered = (devices.data ?? []).filter(
+    (d) =>
+      q === '' ||
+      d.name.toLowerCase().includes(q) ||
+      d.serialNo.toLowerCase().includes(q),
+  );
+  const hasDevices = (devices.data?.length ?? 0) > 0;
 
   return (
     <div>
@@ -76,18 +89,35 @@ export function DevicesPage() {
         isEmpty={devices.data?.length === 0}
         emptyText="No devices registered yet."
       >
-        <TableWrap>
-          <thead>
+        {hasDevices && (
+          <Toolbar className="mb-4">
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              label="Search devices"
+              placeholder="Name or serial…"
+            />
+          </Toolbar>
+        )}
+        <DataTable
+          head={
             <tr>
-              <Th>Name</Th>
-              <Th>Serial</Th>
-              <Th>Status</Th>
-              <Th>Last seen</Th>
-              <Th>Actions</Th>
+              <Th module="devices">Name</Th>
+              <Th module="devices">Serial</Th>
+              <Th module="devices">Status</Th>
+              <Th module="devices">Last seen</Th>
+              <Th module="devices">Actions</Th>
             </tr>
-          </thead>
-          <tbody>
-            {devices.data?.map((d) => (
+          }
+        >
+          {filtered.length === 0 ? (
+            <tr>
+              <Td>
+                <span className="text-[var(--color-muted)]">No devices match your search.</span>
+              </Td>
+            </tr>
+          ) : (
+            filtered.map((d) => (
               <DeviceRow
                 key={d.id}
                 device={d}
@@ -96,9 +126,9 @@ export function DevicesPage() {
                 onSelect={() => setSelected(d)}
                 selected={selected?.id === d.id}
               />
-            ))}
-          </tbody>
-        </TableWrap>
+            ))
+          )}
+        </DataTable>
       </AsyncView>
 
       {selected && <EnrollmentPanel device={selected} canManage={canManage} onMessage={setMessage} />}
@@ -136,11 +166,7 @@ function DeviceRow({
   };
 
   return (
-    <tr
-      className={`border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)] ${
-        selected ? 'bg-[var(--color-brand-600)]/5' : ''
-      }`}
-    >
+    <Tr selected={selected}>
       <Td>
         <button
           className="font-medium text-[var(--color-brand-600)] hover:underline"
@@ -232,7 +258,7 @@ function DeviceRow({
           )}
         </div>
       </Td>
-    </tr>
+    </Tr>
   );
 }
 
@@ -373,32 +399,28 @@ function EnrollmentPanel({
         isEmpty={enrollments.data?.length === 0}
         emptyText="No enrollments on this device."
       >
-        <TableWrap>
-          <thead>
+        <DataTable
+          head={
             <tr>
-              <Th>Employee ID</Th>
-              <Th>Device User ID</Th>
-              <Th>Status</Th>
+              <Th module="devices">Employee ID</Th>
+              <Th module="devices">Device User ID</Th>
+              <Th module="devices">Status</Th>
             </tr>
-          </thead>
-          <tbody>
-            {enrollments.data?.map((e) => (
-              <tr
-                key={e.id}
-                className="border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)]"
-              >
-                <Td>{e.employeeId}</Td>
-                <Td className="font-mono">{e.deviceUserId}</Td>
-                <Td>
-                  <StatusPill
-                    tone={e.isActive ? 'success' : 'neutral'}
-                    label={e.isActive ? 'Active' : 'Inactive'}
-                  />
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
+          }
+        >
+          {enrollments.data?.map((e) => (
+            <Tr key={e.id}>
+              <Td>{e.employeeId}</Td>
+              <Td className="font-mono">{e.deviceUserId}</Td>
+              <Td>
+                <StatusPill
+                  tone={e.isActive ? 'success' : 'neutral'}
+                  label={e.isActive ? 'Active' : 'Inactive'}
+                />
+              </Td>
+            </Tr>
+          ))}
+        </DataTable>
       </AsyncView>
     </Card>
   );

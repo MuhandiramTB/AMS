@@ -40,6 +40,15 @@
   --color-danger:  #e11d48;
   --color-warning: #d97706;
 
+  /* Per-module table-header accents (each list page reads visually distinct).
+     Pairs a soft header background with a readable header text colour. */
+  --hdr-employees-bg:   #eef2ff;  --hdr-employees-fg:   #4338ca;  /* indigo */
+  --hdr-departments-bg: #f0fdfa;  --hdr-departments-fg: #0f766e;  /* teal */
+  --hdr-attendance-bg:  #fff7ed;  --hdr-attendance-fg:  #c2410c;  /* orange */
+  --hdr-shifts-bg:      #faf5ff;  --hdr-shifts-fg:      #7e22ce;  /* violet */
+  --hdr-leave-bg:       #eff6ff;  --hdr-leave-fg:       #1d4ed8;  /* blue */
+  --hdr-devices-bg:     #ecfeff;  --hdr-devices-fg:     #0e7490;  /* cyan */
+
   /* Radius + elevation (enterprise-restrained) */
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;

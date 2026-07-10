@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useCreateDepartment, useDepartments } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { AsyncView, Button, Card, Field, Input, PageHeader, TableWrap, Th, Td, useToast } from '../components/ui';
+import { AsyncView, Button, Card, DataTable, EmptyState, Field, Input, PageHeader, SearchInput, Td, Th, Toolbar, Tr, useToast } from '../components/ui';
 
 function messageFor(error: unknown): string {
   return error instanceof ApiError ? error.message : 'An unexpected error occurred.';
@@ -21,7 +21,13 @@ export function DepartmentsPage() {
   const createDepartment = useCreateDepartment();
   const { register, handleSubmit, reset } = useForm<DeptForm>();
   const [formError, setFormError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const toast = useToast();
+
+  const q = query.trim().toLowerCase();
+  const filtered = (data ?? []).filter(
+    (d) => !q || d.code.toLowerCase().includes(q) || d.name.toLowerCase().includes(q),
+  );
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
@@ -57,28 +63,42 @@ export function DepartmentsPage() {
 
       <AsyncView isLoading={isLoading} isError={isError} isEmpty={data?.length === 0} emptyText="No departments yet.">
         {data && (
-          <TableWrap>
-            <thead>
-              <tr>
-                <Th>Code</Th>
-                <Th>Name</Th>
-                <Th>Status</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((d) => (
-                <tr key={d.id} className="border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)]">
-                  <Td className="font-mono font-medium text-[var(--color-ink)]">{d.code}</Td>
-                  <Td>{d.name}</Td>
-                  <Td>
-                    <span className={d.isActive ? 'font-medium text-[var(--color-present)]' : 'text-[var(--color-muted-soft)]'}>
-                      {d.isActive ? '● Active' : '○ Inactive'}
-                    </span>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrap>
+          <div className="space-y-4">
+            <Toolbar>
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                label="Search departments"
+                placeholder="Code or name…"
+              />
+            </Toolbar>
+
+            {filtered.length === 0 && q ? (
+              <EmptyState title="No departments match your search." />
+            ) : (
+              <DataTable
+                head={
+                  <tr>
+                    <Th module="departments">Code</Th>
+                    <Th module="departments">Name</Th>
+                    <Th module="departments">Status</Th>
+                  </tr>
+                }
+              >
+                {filtered.map((d) => (
+                  <Tr key={d.id}>
+                    <Td className="font-mono font-medium text-[var(--color-ink)]">{d.code}</Td>
+                    <Td>{d.name}</Td>
+                    <Td>
+                      <span className={d.isActive ? 'font-medium text-[var(--color-present)]' : 'text-[var(--color-muted-soft)]'}>
+                        {d.isActive ? '● Active' : '○ Inactive'}
+                      </span>
+                    </Td>
+                  </Tr>
+                ))}
+              </DataTable>
+            )}
+          </div>
         )}
       </AsyncView>
     </div>

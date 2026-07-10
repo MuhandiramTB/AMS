@@ -3,13 +3,19 @@ import { useForm } from 'react-hook-form';
 import { useAssignShift, useCreateShift, useShifts, type CreateShiftInput } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { AsyncView, Button, Card, Field, Input, PageHeader, Select, StatusPill, TableWrap, Td, Th } from '../components/ui';
+import { AsyncView, Button, Card, DataTable, Field, Input, PageHeader, SearchInput, Select, StatusPill, Td, Th, Toolbar, Tr } from '../components/ui';
 
 export function ShiftsPage() {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission('Shift.Write');
   const shifts = useShifts();
   const [message, setMessage] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? shifts.data?.filter((s) => s.code.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))
+    : shifts.data;
 
   return (
     <div>
@@ -28,40 +34,48 @@ export function ShiftsPage() {
         </div>
       )}
 
+      <Toolbar>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          label="Search shifts"
+          placeholder="Code or name…"
+        />
+      </Toolbar>
+
       <AsyncView
         isLoading={shifts.isLoading}
         isError={shifts.isError}
         isEmpty={shifts.data?.length === 0}
         emptyText="No shifts defined yet."
       >
-        <TableWrap>
-          <thead>
+        <DataTable
+          head={
             <tr>
-              <Th>Code</Th>
-              <Th>Name</Th>
-              <Th>Window</Th>
-              <Th>Break</Th>
-              <Th>Grace</Th>
-              <Th>Type</Th>
+              <Th module="shifts">Code</Th>
+              <Th module="shifts">Name</Th>
+              <Th module="shifts">Window</Th>
+              <Th module="shifts">Break</Th>
+              <Th module="shifts">Grace</Th>
+              <Th module="shifts">Type</Th>
             </tr>
-          </thead>
-          <tbody>
-            {shifts.data?.map((s) => (
-              <tr key={s.id} className="border-t border-[var(--color-line-soft)] transition-colors hover:bg-[var(--color-surface-2)]">
-                <Td><span className="font-mono font-semibold text-[var(--color-ink)]">{s.code}</span></Td>
-                <Td>{s.name}</Td>
-                <Td className="tabular">{s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}</Td>
-                <Td>{s.breakMinutes}m</Td>
-                <Td>{s.graceInMinutes}/{s.graceOutMinutes}m</Td>
-                <Td>
-                  {s.isOvernight
-                    ? <StatusPill tone="info" label="Overnight" />
-                    : <StatusPill tone="neutral" label="Day" />}
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
+          }
+        >
+          {filtered?.map((s) => (
+            <Tr key={s.id}>
+              <Td><span className="font-mono font-semibold text-[var(--color-ink)]">{s.code}</span></Td>
+              <Td>{s.name}</Td>
+              <Td className="tabular">{s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}</Td>
+              <Td>{s.breakMinutes}m</Td>
+              <Td>{s.graceInMinutes}/{s.graceOutMinutes}m</Td>
+              <Td>
+                {s.isOvernight
+                  ? <StatusPill tone="info" label="Overnight" />
+                  : <StatusPill tone="neutral" label="Day" />}
+              </Td>
+            </Tr>
+          ))}
+        </DataTable>
       </AsyncView>
     </div>
   );

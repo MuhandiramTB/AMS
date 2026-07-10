@@ -45,12 +45,14 @@ export function useCreateDepartment() {
   });
 }
 
-export function useEmployees(page: number, pageSize: number, departmentId?: number) {
+export function useEmployees(page: number, pageSize: number, departmentId?: number, search?: string) {
+  const q = search?.trim() || undefined;
   return useQuery({
-    queryKey: ['employees', page, pageSize, departmentId ?? null],
+    queryKey: ['employees', page, pageSize, departmentId ?? null, q ?? null],
     queryFn: async () => {
       const { data } = await apiClient.get<PagedResult<Employee>>('/employees', {
-        params: { page, pageSize, departmentId },
+        // Server-side search maps to the API's `q` param (06/05 §10.2).
+        params: { page, pageSize, departmentId, q },
       });
       return data;
     },
