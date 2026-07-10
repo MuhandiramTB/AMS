@@ -44,6 +44,34 @@ public sealed class TamsWebApplicationFactory : WebApplicationFactory<Program>, 
         });
     }
 
+    /// <summary>The in-memory device simulator (singleton) for driving device behaviour in tests.</summary>
+    public TAMS.Infrastructure.Devices.SimulatedDeviceGateway Simulator =>
+        (TAMS.Infrastructure.Devices.SimulatedDeviceGateway)
+        Services.GetRequiredService<TAMS.Application.Common.Ports.IDeviceGateway>();
+
+    /// <summary>Runs a MediatR request within a fresh DI scope (as the worker would).</summary>
+    public async Task<T> SendAsync<T>(MediatR.IRequest<T> request)
+    {
+        using var scope = Services.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<MediatR.ISender>();
+        return await mediator.Send(request);
+    }
+
+    /// <summary>
+    /// Counts DEVICE-SOURCED punches for a device (to assert zero loss / no dup).
+    /// Filters to PunchSource.Device so manual-entry punches from other test classes
+    /// sharing the collection can't contaminate the count.
+    /// </summary>
+    public async Task<int> CountPunchesAsync(long deviceId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TamsDbContext>();
+        return await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
+            db.Punches.Where(p =>
+                p.DeviceId == deviceId &&
+                p.SourceType == TAMS.Domain.Attendance.PunchSource.Device));
+    }
+
     /// <summary>Ensures a clean, migrated, seeded database before the tests run.</summary>
     public async Task ResetDatabaseAsync()
     {

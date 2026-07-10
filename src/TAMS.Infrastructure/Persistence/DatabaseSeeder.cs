@@ -59,7 +59,8 @@ public sealed class DatabaseSeeder
                 Permissions.DepartmentRead, Permissions.DepartmentWrite,
                 Permissions.ShiftRead, Permissions.ShiftWrite,
                 Permissions.AttendanceRead, Permissions.AttendanceReadAll,
-                Permissions.AttendanceWrite, Permissions.AttendanceCorrect
+                Permissions.AttendanceWrite, Permissions.AttendanceCorrect,
+                Permissions.DeviceRead
             },
             // Manager: read capability but NOT the all-rows scope — confined to own
             // records now; the team tier lands with Manager features (06 §5 seam).

@@ -30,6 +30,10 @@ public static class Permissions
     public const string EmployeeReadAll = "Employee.ReadAll";
     public const string AttendanceReadAll = "Attendance.ReadAll";
 
+    // Devices
+    public const string DeviceRead = "Device.Read";
+    public const string DeviceManage = "Device.Manage";
+
     // Administration
     public const string UserManage = "User.Manage";
     public const string RoleManage = "Role.Manage";
@@ -50,6 +54,8 @@ public static class Permissions
         AttendanceCorrect,
         EmployeeReadAll,
         AttendanceReadAll,
+        DeviceRead,
+        DeviceManage,
         UserManage,
         RoleManage,
         AuditRead

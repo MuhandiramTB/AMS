@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="FluentAssertions" Version="6.12.2" />
+    <PackageReference Include="MediatR" Version="12.4.1" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
@@ -24,6 +25,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TAMS.Api\TAMS.Api.csproj" />
+    <ProjectReference Include="..\..\src\TAMS.Infrastructure\TAMS.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\TAMS.Application\TAMS.Application.csproj" />
+    <ProjectReference Include="..\..\src\TAMS.Domain\TAMS.Domain.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TAMS.Application.Common.Ports;
 using TAMS.Domain.Attendance;
 using TAMS.Domain.Audit;
+using TAMS.Domain.Devices;
 using TAMS.Domain.Identity;
 using TAMS.Domain.Scheduling;
 using TAMS.Domain.Workforce;
@@ -43,6 +44,10 @@ public sealed class TamsDbContext : DbContext, IUnitOfWork
     public DbSet<ShiftAssignment> ShiftAssignments => Set<ShiftAssignment>();
     public DbSet<PunchTransaction> Punches => Set<PunchTransaction>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<Device> Devices => Set<Device>();
+    public DbSet<DeviceSyncState> DeviceSyncStates => Set<DeviceSyncState>();
+    public DbSet<DeviceEventLog> DeviceEventLogs => Set<DeviceEventLog>();
+    public DbSet<EmployeeDeviceEnrollment> EmployeeDeviceEnrollments => Set<EmployeeDeviceEnrollment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

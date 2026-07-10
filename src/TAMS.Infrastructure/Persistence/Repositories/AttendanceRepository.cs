@@ -45,6 +45,12 @@ public sealed class AttendanceRepository : IAttendanceRepository
         }
     }
 
+    public async Task<IReadOnlyList<string>> GetPunchKeysForDeviceAsync(long deviceId, CancellationToken cancellationToken = default) =>
+        await _db.Punches.AsNoTracking()
+            .Where(p => p.DeviceId == deviceId)
+            .Select(p => p.IdempotencyKey)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<PunchTransaction>> GetPunchesForDayAsync(
         long employeeId, DateOnly workDate, CancellationToken cancellationToken = default)
     {

@@ -48,6 +48,13 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ISchedulingRepository, SchedulingRepository>();
         services.AddScoped<IAttendanceRepository, AttendanceRepository>();
+        services.AddScoped<IDeviceRepository, DeviceRepository>();
+
+        // ZKTeco device gateway. The simulator is a singleton so its in-memory
+        // device buffers persist across request scopes (dev/test). The real SDK
+        // adapter will replace this registration once OQ-01 is answered. (ADR-002/008.)
+        services.AddSingleton<Devices.SimulatedDeviceGateway>();
+        services.AddSingleton<IDeviceGateway>(sp => sp.GetRequiredService<Devices.SimulatedDeviceGateway>());
 
         // Security
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();

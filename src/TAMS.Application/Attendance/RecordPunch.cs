@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using FluentValidation;
 using MediatR;
 using TAMS.Application.Common.Ports;
@@ -43,7 +41,8 @@ public sealed class RecordPunchHandler : IRequestHandler<RecordPunchCommand, boo
 
     public async Task<bool> Handle(RecordPunchCommand request, CancellationToken cancellationToken)
     {
-        var key = BuildIdempotencyKey(request);
+        var key = PunchIdempotency.BuildKey(
+            request.DeviceId, request.DeviceUserId, request.PunchedAtUtc, request.Direction);
         var punch = new PunchTransaction(
             request.DeviceId,
             request.DeviceUserId,
@@ -57,12 +56,5 @@ public sealed class RecordPunchHandler : IRequestHandler<RecordPunchCommand, boo
         // TryAddPunchAsync persists atomically and is race-safe (see the port).
         return await _attendance.TryAddPunchAsync(punch, cancellationToken);
         // false ⇒ duplicate ignored (idempotent)
-    }
-
-    private static string BuildIdempotencyKey(RecordPunchCommand r)
-    {
-        var raw = $"{r.DeviceId}|{r.DeviceUserId}|{r.PunchedAtUtc:O}|{(byte)r.Direction}";
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
-        return Convert.ToBase64String(hash);
     }
 }
