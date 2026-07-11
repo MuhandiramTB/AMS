@@ -490,7 +490,7 @@ export function useRoles() {
   });
 }
 
-export interface CreateUserInput { userName: string; email: string; password: string; roles: string[] }
+export interface CreateUserInput { userName: string; email: string; password: string; roles: string[]; employeeId?: number | null }
 
 export function useCreateUser() {
   const qc = useQueryClient();
@@ -506,7 +506,7 @@ export function useCreateUser() {
   });
 }
 
-export interface UpdateUserInput { id: number; email: string; roles: string[]; newPassword?: string }
+export interface UpdateUserInput { id: number; email: string; roles: string[]; newPassword?: string; employeeId?: number | null }
 
 export function useUpdateUser() {
   const qc = useQueryClient();

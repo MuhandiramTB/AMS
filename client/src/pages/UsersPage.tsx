@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
-  useCreateUser, useRoles, useSetUserActive, useUpdateUser, useUsers,
+  useCreateUser, useEmployees, useRoles, useSetUserActive, useUpdateUser, useUsers,
   type CreateUserInput,
 } from '../api/hooks';
 import { ApiError } from '../api/client';
 import {
-  AsyncView, Button, ConfirmDialog, DataTable, Field, Input, Modal,
+  AsyncView, Button, ConfirmDialog, DataTable, Field, Input, Modal, Select,
   PageHeader, StatusPill, Td, Th, Tr, RowActions, useToast,
 } from '../components/ui';
-import type { AdminUser } from '../api/types';
+import type { AdminUser, Employee } from '../api/types';
 
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : 'never';
@@ -18,6 +18,7 @@ function fmtDate(iso: string | null): string {
 export function UsersPage() {
   const users = useUsers();
   const roles = useRoles();
+  const employees = useEmployees(1, 100);
   const setActive = useSetUserActive();
   const toast = useToast();
 
@@ -26,6 +27,7 @@ export function UsersPage() {
   const [toggle, setToggle] = useState<AdminUser | null>(null);
 
   const roleNames = (roles.data ?? []).map((r) => r.name);
+  const employeeList = employees.data?.items ?? [];
 
   const confirmToggle = async () => {
     if (!toggle) return;
@@ -90,8 +92,8 @@ export function UsersPage() {
         )}
       </AsyncView>
 
-      {creating && <CreateUserModal roles={roleNames} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); toast('User created.'); }} />}
-      {editing && <EditUserModal user={editing} roles={roleNames} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); toast('User updated.'); }} />}
+      {creating && <CreateUserModal roles={roleNames} employees={employeeList} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); toast('User created.'); }} />}
+      {editing && <EditUserModal user={editing} roles={roleNames} employees={employeeList} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); toast('User updated.'); }} />}
       {toggle && (
         <ConfirmDialog
           title={toggle.isActive ? 'Deactivate user?' : 'Activate user?'}
@@ -137,9 +139,9 @@ function RoleChecks({ roles, selected, onToggle }: { roles: string[]; selected: 
   );
 }
 
-interface CreateForm { userName: string; email: string; password: string }
+interface CreateForm { userName: string; email: string; password: string; employeeId: string }
 
-function CreateUserModal({ roles, onClose, onSaved }: { roles: string[]; onClose: () => void; onSaved: () => void }) {
+function CreateUserModal({ roles, employees, onClose, onSaved }: { roles: string[]; employees: Employee[]; onClose: () => void; onSaved: () => void }) {
   const create = useCreateUser();
   const { register, handleSubmit, formState } = useForm<CreateForm>();
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
@@ -151,7 +153,10 @@ function CreateUserModal({ roles, onClose, onSaved }: { roles: string[]; onClose
     setError(null);
     if (selectedRoles.length === 0) { setError('Select at least one role.'); return; }
     try {
-      await create.mutateAsync({ ...v, roles: selectedRoles } as CreateUserInput);
+      await create.mutateAsync({
+        userName: v.userName, email: v.email, password: v.password, roles: selectedRoles,
+        employeeId: v.employeeId ? Number(v.employeeId) : null,
+      } as CreateUserInput);
       onSaved();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to create user.');
@@ -178,21 +183,30 @@ function CreateUserModal({ roles, onClose, onSaved }: { roles: string[]; onClose
           <span className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">Roles <span className="text-[var(--color-danger)]">*</span></span>
           <RoleChecks roles={roles} selected={selectedRoles} onToggle={toggleRole} />
         </div>
+        <Field id="u-emp" label="Link to employee" hint="So this user can see their own attendance & leave.">
+          <Select id="u-emp" {...register('employeeId')}>
+            <option value="">Not linked</option>
+            {employees.map((e) => <option key={e.id} value={e.id}>{e.employeeNo} — {e.firstName} {e.lastName}</option>)}
+          </Select>
+        </Field>
         {error && <p role="alert" className="text-sm font-medium text-[var(--color-danger)]">{error}</p>}
       </form>
     </Modal>
   );
 }
 
-function EditUserModal({ user, roles, onClose, onSaved }: { user: AdminUser; roles: string[]; onClose: () => void; onSaved: () => void }) {
+function EditUserModal({ user, roles, employees, onClose, onSaved }: { user: AdminUser; roles: string[]; employees: Employee[]; onClose: () => void; onSaved: () => void }) {
   const update = useUpdateUser();
-  const { register, handleSubmit, reset, formState } = useForm<{ email: string; newPassword?: string }>({
-    defaultValues: { email: user.email, newPassword: '' },
+  const { register, handleSubmit, reset, formState } = useForm<{ email: string; newPassword?: string; employeeId: string }>({
+    defaultValues: { email: user.email, newPassword: '', employeeId: user.employeeId?.toString() ?? '' },
   });
   const [selectedRoles, setSelectedRoles] = useState<string[]>(user.roles);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { reset({ email: user.email, newPassword: '' }); setSelectedRoles(user.roles); }, [user, reset]);
+  useEffect(() => {
+    reset({ email: user.email, newPassword: '', employeeId: user.employeeId?.toString() ?? '' });
+    setSelectedRoles(user.roles);
+  }, [user, reset]);
 
   const toggleRole = (r: string) => setSelectedRoles((cur) => cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]);
 
@@ -200,7 +214,10 @@ function EditUserModal({ user, roles, onClose, onSaved }: { user: AdminUser; rol
     setError(null);
     if (selectedRoles.length === 0) { setError('Select at least one role.'); return; }
     try {
-      await update.mutateAsync({ id: user.id, email: v.email, roles: selectedRoles, newPassword: v.newPassword || undefined });
+      await update.mutateAsync({
+        id: user.id, email: v.email, roles: selectedRoles, newPassword: v.newPassword || undefined,
+        employeeId: v.employeeId ? Number(v.employeeId) : null,
+      });
       onSaved();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to update user.');
@@ -221,6 +238,12 @@ function EditUserModal({ user, roles, onClose, onSaved }: { user: AdminUser; rol
           <span className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">Roles <span className="text-[var(--color-danger)]">*</span></span>
           <RoleChecks roles={roles} selected={selectedRoles} onToggle={toggleRole} />
         </div>
+        <Field id="eu-emp" label="Link to employee" hint="So this user can see their own attendance & leave.">
+          <Select id="eu-emp" {...register('employeeId')}>
+            <option value="">Not linked</option>
+            {employees.map((e) => <option key={e.id} value={e.id}>{e.employeeNo} — {e.firstName} {e.lastName}</option>)}
+          </Select>
+        </Field>
         <Field id="eu-pass" label="Reset password" hint="Leave blank to keep the current password.">
           <Input id="eu-pass" type="password" autoComplete="new-password" {...register('newPassword')} />
         </Field>

@@ -122,6 +122,10 @@ public sealed class User : AuditableEntity
         }
     }
 
+    /// <summary>Links (or unlinks) this login to an employee record, so the user's
+    /// own-record data scope resolves to that employee. (06 §5.)</summary>
+    public void LinkToEmployee(long? employeeId) => EmployeeId = employeeId;
+
     public void Deactivate() => IsActive = false;
 
     public void Reactivate() => IsActive = true;

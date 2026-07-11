@@ -115,3 +115,10 @@ export function toApiError(error: unknown): ApiError {
   }
   return new ApiError(0, 'An unexpected error occurred.');
 }
+
+/** HTTP status from either an ApiError (mutations) or a raw AxiosError (queries). */
+export function errorStatus(error: unknown): number | undefined {
+  if (error instanceof ApiError) return error.status;
+  if (axios.isAxiosError(error)) return error.response?.status;
+  return undefined;
+}

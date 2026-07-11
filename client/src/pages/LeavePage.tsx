@@ -109,6 +109,7 @@ export function LeavePage() {
       <AsyncView
         isLoading={requests.isLoading}
         isError={requests.isError}
+        error={requests.error}
         isEmpty={requests.data?.items.length === 0}
         emptyText="No leave requests for this filter."
       >

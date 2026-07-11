@@ -200,6 +200,7 @@ export interface AdminUser {
   email: string;
   roles: string[];
   isActive: boolean;
+  employeeId: number | null;
   lastLoginUtc: string | null;
 }
 

@@ -1,5 +1,6 @@
 import type { ReactNode, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { errorStatus } from '../api/client';
 
 /* ===========================================================================
    TAMS component library (08 §6.2). Accessible by construction, consuming the
@@ -38,9 +39,9 @@ export function StatusPill({ tone, label }: { tone: Tone; label: string }) {
    error is role=alert; empty shows guidance. Signature preserved for tests.
    -------------------------------------------------------------------------- */
 export function AsyncView({
-  isLoading, isError, isEmpty, emptyText, children,
+  isLoading, isError, isEmpty, emptyText, error, children,
 }: {
-  isLoading: boolean; isError: boolean; isEmpty?: boolean; emptyText?: string; children: ReactNode;
+  isLoading: boolean; isError: boolean; isEmpty?: boolean; emptyText?: string; error?: unknown; children: ReactNode;
 }) {
   if (isLoading) {
     return (
@@ -50,7 +51,23 @@ export function AsyncView({
       </div>
     );
   }
-  if (isError) return <p role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-absent-bg)] px-4 py-3 text-sm font-medium text-[var(--color-absent)]">Failed to load. Please retry.</p>;
+  if (isError) {
+    // A 403 is not a failure — it means the signed-in user isn't permitted to see
+    // this data (e.g. a role with no all-rows scope and no linked employee).
+    const status = errorStatus(error);
+    if (status === 403) {
+      return (
+        <div role="status" className="rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-6 text-center">
+          <p className="text-sm font-medium text-[var(--color-ink-soft)]">Nothing to show for your account here.</p>
+          <p className="mx-auto mt-1 max-w-md text-xs text-[var(--color-muted)]">
+            Your role can only see its own records, and your login isn’t linked to an
+            employee record yet. An administrator can link it on the Users page.
+          </p>
+        </div>
+      );
+    }
+    return <p role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-absent-bg)] px-4 py-3 text-sm font-medium text-[var(--color-absent)]">Failed to load. Please retry.</p>;
+  }
   if (isEmpty) return <EmptyState title={emptyText ?? 'Nothing to show yet.'} />;
   return <>{children}</>;
 }

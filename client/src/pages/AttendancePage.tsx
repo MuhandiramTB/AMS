@@ -89,6 +89,7 @@ export function AttendancePage() {
       <AsyncView
         isLoading={records.isLoading}
         isError={records.isError}
+        error={records.error}
         isEmpty={records.data?.items.length === 0}
         emptyText="No attendance records for this filter."
       >

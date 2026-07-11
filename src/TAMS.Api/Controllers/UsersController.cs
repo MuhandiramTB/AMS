@@ -22,7 +22,7 @@ public sealed class UsersController : ApiControllerBase
     public async Task<ActionResult<IReadOnlyList<RoleDto>>> GetRoles(CancellationToken cancellationToken)
         => Ok(await Mediator.Send(new GetRolesQuery(), cancellationToken));
 
-    public sealed record CreateUserRequest(string UserName, string Email, string Password, IReadOnlyList<string> Roles);
+    public sealed record CreateUserRequest(string UserName, string Email, string Password, IReadOnlyList<string> Roles, long? EmployeeId);
 
     /// <summary>POST /api/v1/users — create a login account.</summary>
     [HttpPost]
@@ -31,11 +31,11 @@ public sealed class UsersController : ApiControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<UserDto>> Create([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
     {
-        var result = await Mediator.Send(new CreateUserCommand(request.UserName, request.Email, request.Password, request.Roles), cancellationToken);
+        var result = await Mediator.Send(new CreateUserCommand(request.UserName, request.Email, request.Password, request.Roles, request.EmployeeId), cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { id = result.Id }, result);
     }
 
-    public sealed record UpdateUserRequest(string Email, IReadOnlyList<string> Roles, string? NewPassword);
+    public sealed record UpdateUserRequest(string Email, IReadOnlyList<string> Roles, string? NewPassword, long? EmployeeId);
 
     /// <summary>PUT /api/v1/users/{id} — update email, roles, and optionally reset the password.</summary>
     [HttpPut("{id:long}")]
@@ -43,7 +43,7 @@ public sealed class UsersController : ApiControllerBase
     [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<UserDto>> Update(long id, [FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
-        => Ok(await Mediator.Send(new UpdateUserCommand(id, request.Email, request.Roles, request.NewPassword), cancellationToken));
+        => Ok(await Mediator.Send(new UpdateUserCommand(id, request.Email, request.Roles, request.NewPassword, request.EmployeeId), cancellationToken));
 
     /// <summary>POST /api/v1/users/{id}/activate.</summary>
     [HttpPost("{id:long}/activate")]

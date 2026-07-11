@@ -7,12 +7,12 @@ using TAMS.Domain.Identity;
 namespace TAMS.Application.Users;
 
 // --- DTOs ---
-public sealed record UserDto(long Id, string UserName, string Email, IReadOnlyList<string> Roles, bool IsActive, string? LastLoginUtc)
+public sealed record UserDto(long Id, string UserName, string Email, IReadOnlyList<string> Roles, bool IsActive, long? EmployeeId, string? LastLoginUtc)
 {
     public static UserDto FromEntity(User u) => new(
         u.Id, u.UserName, u.Email,
         u.Roles.Select(r => r.Name).OrderBy(n => n).ToList(),
-        u.IsActive, u.LastLoginUtc?.ToString("O"));
+        u.IsActive, u.EmployeeId, u.LastLoginUtc?.ToString("O"));
 }
 
 public sealed record RoleDto(string Name, string? Description);
@@ -48,7 +48,7 @@ public sealed class GetRolesHandler : IRequestHandler<GetRolesQuery, IReadOnlyLi
 }
 
 // --- Create user (User.Manage) ---
-public sealed record CreateUserCommand(string UserName, string Email, string Password, IReadOnlyList<string> Roles) : IRequest<UserDto>;
+public sealed record CreateUserCommand(string UserName, string Email, string Password, IReadOnlyList<string> Roles, long? EmployeeId = null) : IRequest<UserDto>;
 
 public sealed class CreateUserValidator : AbstractValidator<CreateUserCommand>
 {
@@ -64,12 +64,14 @@ public sealed class CreateUserValidator : AbstractValidator<CreateUserCommand>
 public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserDto>
 {
     private readonly IUserRepository _users;
+    private readonly IEmployeeRepository _employees;
     private readonly IPasswordHasher _hasher;
     private readonly IUnitOfWork _unitOfWork;
 
-    public CreateUserHandler(IUserRepository users, IPasswordHasher hasher, IUnitOfWork unitOfWork)
+    public CreateUserHandler(IUserRepository users, IEmployeeRepository employees, IPasswordHasher hasher, IUnitOfWork unitOfWork)
     {
         _users = users;
+        _employees = employees;
         _hasher = hasher;
         _unitOfWork = unitOfWork;
     }
@@ -87,7 +89,12 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
             throw new BusinessRuleException("One or more roles do not exist.");
         }
 
-        var user = new User(request.UserName, request.Email, _hasher.Hash(request.Password));
+        if (request.EmployeeId is { } empId && !await _employees.ExistsAsync(empId, cancellationToken))
+        {
+            throw new BusinessRuleException($"Employee '{empId}' does not exist.");
+        }
+
+        var user = new User(request.UserName, request.Email, _hasher.Hash(request.Password), request.EmployeeId);
         user.SetRoles(roles);
         await _users.AddAsync(user, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -95,8 +102,8 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
     }
 }
 
-// --- Update user (email + roles; optional password reset) ---
-public sealed record UpdateUserCommand(long Id, string Email, IReadOnlyList<string> Roles, string? NewPassword) : IRequest<UserDto>;
+// --- Update user (email + roles + employee link; optional password reset) ---
+public sealed record UpdateUserCommand(long Id, string Email, IReadOnlyList<string> Roles, string? NewPassword, long? EmployeeId = null) : IRequest<UserDto>;
 
 public sealed class UpdateUserValidator : AbstractValidator<UpdateUserCommand>
 {
@@ -113,12 +120,14 @@ public sealed class UpdateUserValidator : AbstractValidator<UpdateUserCommand>
 public sealed class UpdateUserHandler : IRequestHandler<UpdateUserCommand, UserDto>
 {
     private readonly IUserRepository _users;
+    private readonly IEmployeeRepository _employees;
     private readonly IPasswordHasher _hasher;
     private readonly IUnitOfWork _unitOfWork;
 
-    public UpdateUserHandler(IUserRepository users, IPasswordHasher hasher, IUnitOfWork unitOfWork)
+    public UpdateUserHandler(IUserRepository users, IEmployeeRepository employees, IPasswordHasher hasher, IUnitOfWork unitOfWork)
     {
         _users = users;
+        _employees = employees;
         _hasher = hasher;
         _unitOfWork = unitOfWork;
     }
@@ -134,8 +143,14 @@ public sealed class UpdateUserHandler : IRequestHandler<UpdateUserCommand, UserD
             throw new BusinessRuleException("One or more roles do not exist.");
         }
 
+        if (request.EmployeeId is { } empId && !await _employees.ExistsAsync(empId, cancellationToken))
+        {
+            throw new BusinessRuleException($"Employee '{empId}' does not exist.");
+        }
+
         user.UpdateEmail(request.Email);
         user.SetRoles(roles);
+        user.LinkToEmployee(request.EmployeeId);
         if (!string.IsNullOrEmpty(request.NewPassword))
         {
             user.SetPasswordHash(_hasher.Hash(request.NewPassword));

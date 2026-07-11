@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TAMS.Application.Common.Ports;
 using TAMS.Domain.Identity;
+using TAMS.Domain.Workforce;
 
 namespace TAMS.Infrastructure.Persistence;
 
@@ -55,11 +56,16 @@ public sealed class DatabaseSeeder
     /// <summary>
     /// Seeds one demo user per non-admin role (dev only). Shared password so it is
     /// easy to try each role; each user is created only if absent, so re-runs are
-    /// safe. (Never call this in production — no default credentials should exist.)
+    /// safe. The manager/employee demo logins are LINKED to demo employee records so
+    /// their own-record data scope resolves (otherwise scoped pages 403). Never call
+    /// this in production — no default credentials should exist.
     /// </summary>
     private async Task SeedDemoUsersAsync()
     {
         const string demoPassword = "Demo!123";
+
+        // A demo department + two demo employees the manager/employee logins link to.
+        var employeeIds = await SeedDemoEmployeesAsync();
 
         foreach (var (roleName, userName, email) in DemoUsers)
         {
@@ -68,12 +74,52 @@ public sealed class DatabaseSeeder
                 continue;
             }
 
+            // Link the employee-scoped roles to a real employee so their own records load.
+            long? linkedEmployeeId = userName switch
+            {
+                "employee" => employeeIds.EmployeeUserEmpId,
+                "manager" => employeeIds.ManagerUserEmpId,
+                _ => null,
+            };
+
             var role = await _db.Roles.Include(r => r.Permissions).FirstAsync(r => r.Name == roleName);
-            var user = new User(userName, email, _passwordHasher.Hash(demoPassword));
+            var user = new User(userName, email, _passwordHasher.Hash(demoPassword), linkedEmployeeId);
             user.AssignRole(role);
             _db.Users.Add(user);
-            _logger.LogInformation("Seeded demo user '{UserName}' with role {Role}.", userName, roleName);
+            _logger.LogInformation("Seeded demo user '{UserName}' (role {Role}, employee {Emp}).", userName, roleName, linkedEmployeeId);
         }
+    }
+
+    /// <summary>Creates a demo department + two demo employees (idempotent). Returns
+    /// the employee ids to link to the manager/employee demo logins.</summary>
+    private async Task<(long ManagerUserEmpId, long EmployeeUserEmpId)> SeedDemoEmployeesAsync()
+    {
+        var now = DateTime.UtcNow;
+
+        var dept = await _db.Departments.FirstOrDefaultAsync(d => d.Code == "DEMO");
+        if (dept is null)
+        {
+            dept = new Department("DEMO", "Demo Department");
+            _db.Departments.Add(dept);
+            await _db.SaveChangesAsync(); // assign the department id
+        }
+
+        async Task<long> EnsureEmployee(string no, string first, string last, string email)
+        {
+            var existing = await _db.Employees.FirstOrDefaultAsync(e => e.EmployeeNo == no);
+            if (existing is not null)
+            {
+                return existing.Id;
+            }
+            var emp = new Employee(no, first, last, dept.Id, now, email);
+            _db.Employees.Add(emp);
+            await _db.SaveChangesAsync(); // assign the employee id
+            return emp.Id;
+        }
+
+        var managerEmpId = await EnsureEmployee("DEMO-MGR", "Demo", "Manager", "manager@tams.local");
+        var employeeEmpId = await EnsureEmployee("DEMO-EMP", "Demo", "Employee", "employee@tams.local");
+        return (managerEmpId, employeeEmpId);
     }
 
     private async Task SeedPermissionsAsync()
