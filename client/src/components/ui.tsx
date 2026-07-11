@@ -549,3 +549,50 @@ export function RowActions({ actions, label = 'Row actions' }: { actions: RowAct
     </div>
   );
 }
+
+/* --------------------------------------------------------------------------
+   IconButton — a compact, accessible icon-only action button for table rows.
+   Always carries an aria-label + tooltip title so it is not icon-alone to AT.
+   -------------------------------------------------------------------------- */
+export function IconButton({
+  label, onClick, icon, tone = 'default', disabled = false,
+}: {
+  label: string; onClick: () => void; icon: ReactNode; tone?: 'default' | 'danger' | 'success'; disabled?: boolean;
+}) {
+  const tones: Record<string, string> = {
+    default: 'text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-brand-700)]',
+    danger: 'text-[var(--color-muted)] hover:bg-[var(--color-absent-bg)] hover:text-[var(--color-danger)]',
+    success: 'text-[var(--color-muted)] hover:bg-[var(--color-present-bg)] hover:text-[var(--color-present)]',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`inline-grid h-8 w-8 place-items-center rounded-[var(--radius-md)] transition-colors disabled:opacity-40 ${tones[tone]}`}
+    >
+      {icon}
+    </button>
+  );
+}
+
+/** Common 18px stroke icons for row actions. */
+export const ActionIcons = {
+  edit: (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  deactivate: (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M18.36 6.64a9 9 0 11-12.73 0M12 2v10" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  activate: (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+} as const;

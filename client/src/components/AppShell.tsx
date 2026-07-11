@@ -18,6 +18,7 @@ const I = {
   employees: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0111 0M16 11a3 3 0 100-6M15.5 20a5.5 5.5 0 015-3" strokeLinecap="round" /></>,
   departments: <><path d="M3 21h18M6 21V8l6-4 6 4v13M9 12h.01M15 12h.01M9 16h.01M15 16h.01" strokeLinecap="round" /></>,
   devices: <><rect x="4" y="3" width="16" height="14" rx="2" /><path d="M8 21h8M12 17v4" strokeLinecap="round" /></>,
+  users: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0111 0M17 8h4M19 6v4" strokeLinecap="round" /></>,
 };
 
 function NavIcon({ path }: { path: ReactNode }) {
@@ -36,6 +37,7 @@ const NAV: NavItem[] = [
   { label: 'Employees', to: '/employees', permission: 'Employee.Read', icon: <NavIcon path={I.employees} /> },
   { label: 'Departments', to: '/departments', permission: 'Department.Read', icon: <NavIcon path={I.departments} /> },
   { label: 'Devices', to: '/devices', permission: 'Device.Read', icon: <NavIcon path={I.devices} /> },
+  { label: 'Users', to: '/users', permission: 'User.Manage', icon: <NavIcon path={I.users} /> },
 ];
 
 function initials(name?: string) {

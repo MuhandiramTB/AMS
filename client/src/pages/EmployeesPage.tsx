@@ -9,7 +9,7 @@ import { ApiError } from '../api/client';
 import { useDebounced } from '../lib/useDebounced';
 import {
   Button, Card, Field, Input, Select, PageHeader, DataTable, Th, Td, Tr,
-  Toolbar, SearchInput, Pagination, EmptyState, StatusPill, RowActions, Modal, ConfirmDialog,
+  Toolbar, SearchInput, Pagination, EmptyState, StatusPill, IconButton, ActionIcons, Modal, ConfirmDialog,
   DEFAULT_PAGE_SIZE, useToast,
 } from '../components/ui';
 import type { Employee } from '../api/types';
@@ -175,15 +175,15 @@ export function EmployeesPage() {
                     <StatusPill tone={e.isActive ? 'success' : 'neutral'} label={e.isActive ? 'Active' : 'Inactive'} />
                   </Td>
                   {canWrite && (
-                    <Td className="text-right">
-                      <RowActions
-                        actions={[
-                          { label: 'Edit', onClick: () => setEditing(e) },
-                          e.isActive
-                            ? { label: 'Deactivate', tone: 'danger', onClick: () => setToggle(e) }
-                            : { label: 'Activate', onClick: () => setToggle(e) },
-                        ]}
-                      />
+                    <Td>
+                      <div className="flex items-center justify-end gap-1">
+                        <IconButton label={`Edit ${e.employeeNo}`} icon={ActionIcons.edit} onClick={() => setEditing(e)} />
+                        {e.isActive ? (
+                          <IconButton label={`Deactivate ${e.employeeNo}`} tone="danger" icon={ActionIcons.deactivate} onClick={() => setToggle(e)} />
+                        ) : (
+                          <IconButton label={`Activate ${e.employeeNo}`} tone="success" icon={ActionIcons.activate} onClick={() => setToggle(e)} />
+                        )}
+                      </div>
                     </Td>
                   )}
                 </Tr>

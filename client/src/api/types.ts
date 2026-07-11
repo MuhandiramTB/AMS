@@ -193,6 +193,21 @@ export interface AttendanceSummary {
   byDepartment: DepartmentCount[];
 }
 
+// --- User administration (Admin) ---
+export interface AdminUser {
+  id: number;
+  userName: string;
+  email: string;
+  roles: string[];
+  isActive: boolean;
+  lastLoginUtc: string | null;
+}
+
+export interface Role {
+  name: string;
+  description: string | null;
+}
+
 /** RFC 9457 problem details shape (05 §6). */
 export interface ProblemDetails {
   type?: string;

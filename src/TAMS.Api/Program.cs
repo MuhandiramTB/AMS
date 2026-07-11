@@ -154,7 +154,11 @@ if (app.Environment.IsDevelopment())
             await seeder.SeedAsync(
                 admin.GetValue<string>("UserName") ?? "admin",
                 admin.GetValue<string>("Email") ?? "admin@tams.local",
-                password);
+                password,
+                // Dev-only: seed one demo login per role (hr/manager/employee/auditor)
+                // so each role's UI can be explored. This block already only runs in
+                // Development, so demo users never reach production.
+                seedDemoUsers: true);
         }
     }
     catch (Exception ex)

@@ -1,7 +1,8 @@
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { useAttendanceSummary } from '../api/hooks';
+import { useAttendanceSummary, useLeaveRequests } from '../api/hooks';
 import type { AttendanceSummary } from '../api/types';
-import { AsyncView, Card, StatTile, StatusPill, PageHeader } from '../components/ui';
+import { AsyncView, Card, StatTile, StatusPill, PageHeader, Button } from '../components/ui';
 
 // Small inline icons for the KPI tiles.
 const icons = {
@@ -15,28 +16,114 @@ const icons = {
 export function DashboardPage() {
   const { user, hasPermission } = useAuth();
   const canViewReports = hasPermission('Report.Read');
+  const canApproveLeave = hasPermission('Leave.Approve');
+  const canReadLeave = hasPermission('Leave.Read');
+  const canAudit = hasPermission('Audit.Read');
 
   // Default to today (server also defaults to today when workDate is omitted).
   // Only fetch when the user is permitted, so restricted users never trigger a 403.
   const summary = useAttendanceSummary(undefined, undefined, { enabled: canViewReports });
 
   return (
-    <div>
-      <PageHeader title={`Welcome back, ${user?.userName ?? ''}`.trim()} subtitle="Here's today's attendance at a glance." />
+    <div className="space-y-5">
+      <PageHeader
+        title={`Welcome back, ${user?.userName ?? ''}`.trim()}
+        subtitle={canViewReports ? "Here's today's attendance at a glance." : 'Your workspace.'}
+      />
 
       {!canViewReports ? (
-        <Card>
-          <p className="text-sm text-[var(--color-muted)]">
-            You don’t have access to attendance reporting. Contact an administrator if you
-            believe this is a mistake.
-          </p>
-        </Card>
+        <>
+          {/* Non-reporting roles (e.g. Employee) get a personal workspace. */}
+          <Card>
+            <p className="text-sm text-[var(--color-muted)]">
+              You don’t have access to attendance reporting. Contact an administrator if you
+              believe this is a mistake.
+            </p>
+          </Card>
+          {canReadLeave && <PersonalPanel />}
+        </>
       ) : (
         <AsyncView isLoading={summary.isLoading} isError={summary.isError}>
           {summary.data && <DashboardContent data={summary.data} refreshing={summary.isFetching} />}
         </AsyncView>
       )}
+
+      {/* Manager / approver slice: leave awaiting a decision. */}
+      {canApproveLeave && <ApprovalsPanel />}
+
+      {/* Auditor slice: shortcut into the audit trail focus. */}
+      {canAudit && (
+        <Card>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--color-ink)]">Audit &amp; compliance</h2>
+              <p className="mt-0.5 text-sm text-[var(--color-muted)]">You have read-only oversight across the system.</p>
+            </div>
+            <Link to="/attendance"><Button>Review attendance</Button></Link>
+          </div>
+        </Card>
+      )}
     </div>
+  );
+}
+
+/** Manager/HR panel — leave requests waiting for approval. */
+function ApprovalsPanel() {
+  const pending = useLeaveRequests(1, 5, { status: 'Submitted' });
+  return (
+    <Card pad={false}>
+      <div className="flex items-center justify-between px-5 py-4">
+        <h2 className="text-sm font-semibold text-[var(--color-ink)]">Leave awaiting your approval</h2>
+        <Link to="/leave" className="text-sm font-medium text-[var(--color-brand-700)] hover:underline">Go to Leave →</Link>
+      </div>
+      <div className="px-5 pb-5">
+        <AsyncView
+          isLoading={pending.isLoading}
+          isError={pending.isError}
+          isEmpty={pending.data?.items.length === 0}
+          emptyText="Nothing waiting — you're all caught up. 🎉"
+        >
+          <ul className="divide-y divide-[var(--color-line-soft)]">
+            {pending.data?.items.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                <span className="text-[var(--color-ink-soft)]">Employee #{r.employeeId} · {r.startDate} → {r.endDate}</span>
+                <StatusPill tone="info" label={`${r.dayCount} day(s)`} />
+              </li>
+            ))}
+          </ul>
+        </AsyncView>
+      </div>
+    </Card>
+  );
+}
+
+/** Employee personal panel — their own recent leave requests (they can read these). */
+function PersonalPanel() {
+  const mine = useLeaveRequests(1, 5, {});
+  return (
+    <Card pad={false}>
+      <div className="flex items-center justify-between px-5 py-4">
+        <h2 className="text-sm font-semibold text-[var(--color-ink)]">My recent leave</h2>
+        <Link to="/leave" className="text-sm font-medium text-[var(--color-brand-700)] hover:underline">Request leave →</Link>
+      </div>
+      <div className="px-5 pb-5">
+        <AsyncView
+          isLoading={mine.isLoading}
+          isError={mine.isError}
+          isEmpty={mine.data?.items.length === 0}
+          emptyText="No leave requests yet."
+        >
+          <ul className="divide-y divide-[var(--color-line-soft)]">
+            {mine.data?.items.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                <span className="text-[var(--color-ink-soft)]">{r.startDate} → {r.endDate} · {r.dayCount} day(s)</span>
+                <StatusPill tone="neutral" label={r.status} />
+              </li>
+            ))}
+          </ul>
+        </AsyncView>
+      </div>
+    </Card>
   );
 }
 

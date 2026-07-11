@@ -11,6 +11,7 @@ import { EmployeesPage } from './pages/EmployeesPage';
 import { LeavePage } from './pages/LeavePage';
 import { LoginPage } from './pages/LoginPage';
 import { ShiftsPage } from './pages/ShiftsPage';
+import { UsersPage } from './pages/UsersPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -45,6 +46,7 @@ function AuthenticatedApp() {
         <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/departments" element={<DepartmentsPage />} />
         <Route path="/devices" element={<DevicesPage />} />
+        <Route path="/users" element={<UsersPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

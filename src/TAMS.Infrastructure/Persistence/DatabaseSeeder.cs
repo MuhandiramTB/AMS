@@ -24,12 +24,56 @@ public sealed class DatabaseSeeder
         _logger = logger;
     }
 
-    public async Task SeedAsync(string bootstrapAdminUserName, string bootstrapAdminEmail, string bootstrapAdminPassword)
+    public async Task SeedAsync(
+        string bootstrapAdminUserName,
+        string bootstrapAdminEmail,
+        string bootstrapAdminPassword,
+        bool seedDemoUsers = false)
     {
         await SeedPermissionsAsync();
         await SeedRolesAsync();
         await SeedBootstrapAdminAsync(bootstrapAdminUserName, bootstrapAdminEmail, bootstrapAdminPassword);
+
+        // Development-only convenience: one login per role so each role's UI can be
+        // seen. NEVER enabled in production (gated by the caller). Idempotent.
+        if (seedDemoUsers)
+        {
+            await SeedDemoUsersAsync();
+        }
+
         await _db.SaveChangesAsync();
+    }
+
+    private static readonly (string Role, string UserName, string Email)[] DemoUsers =
+    {
+        (RoleNames.HrOfficer, "hr", "hr@tams.local"),
+        (RoleNames.Manager, "manager", "manager@tams.local"),
+        (RoleNames.Employee, "employee", "employee@tams.local"),
+        (RoleNames.Auditor, "auditor", "auditor@tams.local"),
+    };
+
+    /// <summary>
+    /// Seeds one demo user per non-admin role (dev only). Shared password so it is
+    /// easy to try each role; each user is created only if absent, so re-runs are
+    /// safe. (Never call this in production — no default credentials should exist.)
+    /// </summary>
+    private async Task SeedDemoUsersAsync()
+    {
+        const string demoPassword = "Demo!123";
+
+        foreach (var (roleName, userName, email) in DemoUsers)
+        {
+            if (await _db.Users.AnyAsync(u => u.UserName == userName))
+            {
+                continue;
+            }
+
+            var role = await _db.Roles.Include(r => r.Permissions).FirstAsync(r => r.Name == roleName);
+            var user = new User(userName, email, _passwordHasher.Hash(demoPassword));
+            user.AssignRole(role);
+            _db.Users.Add(user);
+            _logger.LogInformation("Seeded demo user '{UserName}' with role {Role}.", userName, roleName);
+        }
     }
 
     private async Task SeedPermissionsAsync()

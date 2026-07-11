@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient, toApiError } from './client';
 import type {
+  AdminUser,
   AttendanceRecord,
   AttendanceSummary,
   Department,
@@ -13,6 +14,7 @@ import type {
   LeaveType,
   PagedResult,
   ReconcileResult,
+  Role,
   Shift,
   SyncDeviceResult,
   TestConnectionResult,
@@ -470,5 +472,66 @@ export function useAttendanceSummary(
       })).data,
     // The dashboard should feel near-live without hammering the API (FR-RPT-001).
     refetchInterval: enabled ? 30000 : false,
+  });
+}
+
+// --- User administration (Admin — User.Manage) ---
+export function useUsers() {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: async () => (await apiClient.get<AdminUser[]>('/users')).data,
+  });
+}
+
+export function useRoles() {
+  return useQuery({
+    queryKey: ['roles'],
+    queryFn: async () => (await apiClient.get<Role[]>('/users/roles')).data,
+  });
+}
+
+export interface CreateUserInput { userName: string; email: string; password: string; roles: string[] }
+
+export function useCreateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateUserInput) => {
+      try {
+        return (await apiClient.post<AdminUser>('/users', input)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export interface UpdateUserInput { id: number; email: string; roles: string[]; newPassword?: string }
+
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateUserInput) => {
+      try {
+        return (await apiClient.put<AdminUser>(`/users/${id}`, body)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useSetUserActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
+      try {
+        return (await apiClient.post<AdminUser>(`/users/${id}/${active ? 'activate' : 'deactivate'}`, {})).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
 }

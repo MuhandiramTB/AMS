@@ -103,6 +103,25 @@ public sealed class User : AuditableEntity
         PasswordHash = passwordHash;
     }
 
+    public void UpdateEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new DomainException("Email is required.");
+        }
+        Email = email.Trim();
+    }
+
+    /// <summary>Replaces the user's roles with the given set. (Admin user management.)</summary>
+    public void SetRoles(IEnumerable<Role> roles)
+    {
+        _roles.Clear();
+        foreach (var role in roles)
+        {
+            AssignRole(role);
+        }
+    }
+
     public void Deactivate() => IsActive = false;
 
     public void Reactivate() => IsActive = true;
