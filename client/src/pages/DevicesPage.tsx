@@ -4,6 +4,7 @@ import {
   useDevices,
   useDeviceEnrollments,
   useDisableDevice,
+  useEmployees,
   useEnableDevice,
   useEnrollEmployee,
   useReconcileDevice,
@@ -14,6 +15,7 @@ import {
 } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
+import { useDebounced } from '../lib/useDebounced';
 import {
   AsyncView,
   Button,
@@ -24,6 +26,7 @@ import {
   Input,
   PageHeader,
   SearchInput,
+  Select,
   StatusPill,
   Td,
   Th,
@@ -357,6 +360,13 @@ function EnrollmentPanel({
   const form = useForm<{ employeeId: string; deviceUserId: string }>();
   const [err, setErr] = useState<string | null>(null);
 
+  // Employee picker: search by name/number (server-side) → choose from a dropdown,
+  // so an admin never has to know the raw employee id.
+  const [empSearch, setEmpSearch] = useState('');
+  const debounced = useDebounced(empSearch);
+  const employees = useEmployees(1, 50, undefined, debounced);
+  const employeeList = employees.data?.items ?? [];
+
   const onSubmit = form.handleSubmit(async (values) => {
     setErr(null);
     try {
@@ -366,6 +376,7 @@ function EnrollmentPanel({
         deviceUserId: values.deviceUserId,
       });
       form.reset();
+      setEmpSearch('');
       onMessage('Employee enrolled.');
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Enrollment failed.');
@@ -374,26 +385,35 @@ function EnrollmentPanel({
 
   return (
     <Card className="mt-6">
-      <h2 className="mb-4 text-base font-semibold text-[var(--color-ink)]">
+      <h2 className="mb-1 text-base font-semibold text-[var(--color-ink)]">
         Enrollments — {device.name}
       </h2>
+      <p className="mb-4 text-xs text-[var(--color-muted)]">
+        Link an employee to the ID their fingerprint was registered under on this device.
+      </p>
 
       {canManage && (
         <form onSubmit={onSubmit} className="mb-5 flex flex-wrap items-end gap-3">
-          <Field id="enr-emp" label="Employee ID" className="w-40">
-            <Input
-              id="enr-emp"
-              aria-label="Employee ID"
-              placeholder="Employee ID"
-              type="number"
-              {...form.register('employeeId', { required: true })}
-            />
+          <SearchInput
+            value={empSearch}
+            onChange={setEmpSearch}
+            label="Find employee"
+            placeholder="Name or employee no…"
+            className="min-w-56 flex-none"
+          />
+          <Field id="enr-emp" label="Employee" className="w-56">
+            <Select id="enr-emp" {...form.register('employeeId', { required: true })}>
+              <option value="">Select employee…</option>
+              {employeeList.map((e) => (
+                <option key={e.id} value={e.id}>{e.employeeNo} — {e.firstName} {e.lastName}</option>
+              ))}
+            </Select>
           </Field>
-          <Field id="enr-user" label="Device user ID" className="w-40">
+          <Field id="enr-user" label="Device user ID" className="w-40" hint="The number from the device">
             <Input
               id="enr-user"
               aria-label="Device user ID"
-              placeholder="Device user ID"
+              placeholder="e.g. 5"
               {...form.register('deviceUserId', { required: true })}
             />
           </Field>
