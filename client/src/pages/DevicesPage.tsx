@@ -461,8 +461,9 @@ function EnrollmentPanel({
 
       {canManage && (
         <form onSubmit={onSubmit} className="mb-6 rounded-[var(--radius-lg)] border border-[var(--color-line)] bg-[var(--color-surface-2)] p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <Field id="enr-emp" label="Employee" className="w-72">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="w-72">
+              <label htmlFor="enr-emp" className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">Employee</label>
               <SearchableSelect
                 id="enr-emp"
                 options={employeeOptions}
@@ -472,18 +473,21 @@ function EnrollmentPanel({
                 searchPlaceholder="Search by name or no…"
                 emptyText="No matching employee"
               />
-            </Field>
-            <Field id="enr-user" label="Device user ID" className="w-32" hint="From the device">
+            </div>
+            <div className="w-32">
+              <label htmlFor="enr-user" className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">Device user ID</label>
               <Input
                 id="enr-user"
                 aria-label="Device user ID"
                 placeholder="e.g. 5"
                 {...form.register('deviceUserId', { required: true })}
               />
-            </Field>
-            <Button type="submit" variant="primary" loading={enroll.isPending}>
-              Enroll
-            </Button>
+            </div>
+            <div className="pt-[26px]">
+              <Button type="submit" variant="primary" loading={enroll.isPending}>
+                Enroll
+              </Button>
+            </div>
           </div>
           {err && (
             <p role="alert" className="mt-3 text-sm font-medium text-[var(--color-danger)]">
