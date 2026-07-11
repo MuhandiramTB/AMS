@@ -113,48 +113,18 @@ export function UsersPage() {
   );
 }
 
-/** A multi-select list of role checkboxes. */
-function RoleChecks({ roles, selected, onToggle }: { roles: string[]; selected: string[]; onToggle: (r: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {roles.map((r) => {
-        const on = selected.includes(r);
-        return (
-          <button
-            key={r}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onToggle(r)}
-            className={`rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset transition-colors ${
-              on
-                ? 'bg-[var(--color-brand-600)] text-white ring-[var(--color-brand-600)]'
-                : 'bg-white text-[var(--color-ink-soft)] ring-[var(--color-line)] hover:bg-[var(--color-surface-2)]'
-            }`}
-          >
-            {r}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-interface CreateForm { userName: string; email: string; password: string; employeeId: string }
+interface CreateForm { userName: string; email: string; password: string; role: string; employeeId: string }
 
 function CreateUserModal({ roles, employees, onClose, onSaved }: { roles: string[]; employees: Employee[]; onClose: () => void; onSaved: () => void }) {
   const create = useCreateUser();
   const { register, handleSubmit, formState } = useForm<CreateForm>();
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  const toggleRole = (r: string) => setSelectedRoles((cur) => cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]);
 
   const submit = handleSubmit(async (v) => {
     setError(null);
-    if (selectedRoles.length === 0) { setError('Select at least one role.'); return; }
     try {
       await create.mutateAsync({
-        userName: v.userName, email: v.email, password: v.password, roles: selectedRoles,
+        userName: v.userName, email: v.email, password: v.password, roles: [v.role],
         employeeId: v.employeeId ? Number(v.employeeId) : null,
       } as CreateUserInput);
       onSaved();
@@ -179,10 +149,12 @@ function CreateUserModal({ roles, employees, onClose, onSaved }: { roles: string
         <Field id="u-pass" label="Password" required hint="At least 8 characters." error={formState.errors.password?.message}>
           <Input id="u-pass" type="password" {...register('password', { required: 'Required', minLength: { value: 8, message: 'At least 8 characters.' } })} />
         </Field>
-        <div>
-          <span className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">Roles <span className="text-[var(--color-danger)]">*</span></span>
-          <RoleChecks roles={roles} selected={selectedRoles} onToggle={toggleRole} />
-        </div>
+        <Field id="u-role" label="Role" required error={formState.errors.role?.message}>
+          <Select id="u-role" defaultValue="" {...register('role', { required: 'Select a role.' })}>
+            <option value="" disabled>Choose a role…</option>
+            {roles.map((r) => <option key={r} value={r}>{r}</option>)}
+          </Select>
+        </Field>
         <Field id="u-emp" label="Link to employee" hint="So this user can see their own attendance & leave.">
           <Select id="u-emp" {...register('employeeId')}>
             <option value="">Not linked</option>
@@ -197,25 +169,20 @@ function CreateUserModal({ roles, employees, onClose, onSaved }: { roles: string
 
 function EditUserModal({ user, roles, employees, onClose, onSaved }: { user: AdminUser; roles: string[]; employees: Employee[]; onClose: () => void; onSaved: () => void }) {
   const update = useUpdateUser();
-  const { register, handleSubmit, reset, formState } = useForm<{ email: string; newPassword?: string; employeeId: string }>({
-    defaultValues: { email: user.email, newPassword: '', employeeId: user.employeeId?.toString() ?? '' },
+  const { register, handleSubmit, reset, formState } = useForm<{ email: string; newPassword?: string; role: string; employeeId: string }>({
+    defaultValues: { email: user.email, newPassword: '', role: user.roles[0] ?? '', employeeId: user.employeeId?.toString() ?? '' },
   });
-  const [selectedRoles, setSelectedRoles] = useState<string[]>(user.roles);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    reset({ email: user.email, newPassword: '', employeeId: user.employeeId?.toString() ?? '' });
-    setSelectedRoles(user.roles);
+    reset({ email: user.email, newPassword: '', role: user.roles[0] ?? '', employeeId: user.employeeId?.toString() ?? '' });
   }, [user, reset]);
-
-  const toggleRole = (r: string) => setSelectedRoles((cur) => cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]);
 
   const submit = handleSubmit(async (v) => {
     setError(null);
-    if (selectedRoles.length === 0) { setError('Select at least one role.'); return; }
     try {
       await update.mutateAsync({
-        id: user.id, email: v.email, roles: selectedRoles, newPassword: v.newPassword || undefined,
+        id: user.id, email: v.email, roles: [v.role], newPassword: v.newPassword || undefined,
         employeeId: v.employeeId ? Number(v.employeeId) : null,
       });
       onSaved();
@@ -234,10 +201,11 @@ function EditUserModal({ user, roles, employees, onClose, onSaved }: { user: Adm
         <Field id="eu-email" label="Email" required error={formState.errors.email?.message}>
           <Input id="eu-email" type="email" {...register('email', { required: 'Required' })} />
         </Field>
-        <div>
-          <span className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">Roles <span className="text-[var(--color-danger)]">*</span></span>
-          <RoleChecks roles={roles} selected={selectedRoles} onToggle={toggleRole} />
-        </div>
+        <Field id="eu-role" label="Role" required error={formState.errors.role?.message}>
+          <Select id="eu-role" {...register('role', { required: 'Select a role.' })}>
+            {roles.map((r) => <option key={r} value={r}>{r}</option>)}
+          </Select>
+        </Field>
         <Field id="eu-emp" label="Link to employee" hint="So this user can see their own attendance & leave.">
           <Select id="eu-emp" {...register('employeeId')}>
             <option value="">Not linked</option>
