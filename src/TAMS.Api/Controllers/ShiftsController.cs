@@ -35,6 +35,34 @@ public sealed class ShiftsController : ApiControllerBase
         return CreatedAtAction(nameof(GetAll), new { id = result.Id }, result);
     }
 
+    public sealed record UpdateShiftRequest(
+        string Name, TimeOnly StartTime, TimeOnly EndTime,
+        int BreakMinutes, int GraceInMinutes, int GraceOutMinutes, int OvertimeThresholdMinutes);
+
+    /// <summary>PUT /api/v1/shifts/{id} — update rule values (code immutable).</summary>
+    [HttpPut("{id:long}")]
+    [HasPermission(Permissions.ShiftWrite)]
+    [ProducesResponseType(typeof(ShiftDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ShiftDto>> Update(long id, [FromBody] UpdateShiftRequest request, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new UpdateShiftCommand(
+            id, request.Name, request.StartTime, request.EndTime,
+            request.BreakMinutes, request.GraceInMinutes, request.GraceOutMinutes, request.OvertimeThresholdMinutes), cancellationToken));
+
+    /// <summary>POST /api/v1/shifts/{id}/activate.</summary>
+    [HttpPost("{id:long}/activate")]
+    [HasPermission(Permissions.ShiftWrite)]
+    [ProducesResponseType(typeof(ShiftDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ShiftDto>> Activate(long id, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new SetShiftActiveCommand(id, true), cancellationToken));
+
+    /// <summary>POST /api/v1/shifts/{id}/deactivate.</summary>
+    [HttpPost("{id:long}/deactivate")]
+    [HasPermission(Permissions.ShiftWrite)]
+    [ProducesResponseType(typeof(ShiftDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ShiftDto>> Deactivate(long id, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new SetShiftActiveCommand(id, false), cancellationToken));
+
     [HttpPost("assignments")]
     [HasPermission(Permissions.ShiftWrite)]
     [ProducesResponseType(typeof(ShiftAssignmentDto), StatusCodes.Status201Created)]

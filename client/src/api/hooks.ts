@@ -45,6 +45,34 @@ export function useCreateDepartment() {
   });
 }
 
+export function useUpdateDepartment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name, parentDepartmentId }: { id: number; name: string; parentDepartmentId?: number | null }) => {
+      try {
+        return (await apiClient.put<Department>(`/departments/${id}`, { name, parentDepartmentId })).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['departments'] }),
+  });
+}
+
+export function useSetDepartmentActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
+      try {
+        return (await apiClient.post<Department>(`/departments/${id}/${active ? 'activate' : 'deactivate'}`, {})).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['departments'] }),
+  });
+}
+
 export function useEmployees(page: number, pageSize: number, departmentId?: number, search?: string) {
   const q = search?.trim() || undefined;
   return useQuery({
@@ -84,6 +112,42 @@ export function useCreateEmployee() {
   });
 }
 
+export interface UpdateEmployeeInput {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  primaryDepartmentId: number;
+}
+
+export function useUpdateEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateEmployeeInput) => {
+      try {
+        return (await apiClient.put<Employee>(`/employees/${id}`, body)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['employees'] }),
+  });
+}
+
+export function useSetEmployeeActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
+      try {
+        return (await apiClient.post<Employee>(`/employees/${id}/${active ? 'activate' : 'deactivate'}`, {})).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['employees'] }),
+  });
+}
+
 // --- Shifts (P2) ---
 export function useShifts() {
   return useQuery({
@@ -109,6 +173,39 @@ export function useCreateShift() {
     mutationFn: async (input: CreateShiftInput) => {
       try {
         return (await apiClient.post<Shift>('/shifts', input)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shifts'] }),
+  });
+}
+
+export interface UpdateShiftInput extends CreateShiftInput {
+  id: number;
+}
+
+export function useUpdateShift() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, code: _code, ...body }: UpdateShiftInput) => {
+      try {
+        // Code is immutable on update; send only the editable rule values.
+        return (await apiClient.put<Shift>(`/shifts/${id}`, body)).data;
+      } catch (error) {
+        throw toApiError(error);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shifts'] }),
+  });
+}
+
+export function useSetShiftActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
+      try {
+        return (await apiClient.post<Shift>(`/shifts/${id}/${active ? 'activate' : 'deactivate'}`, {})).data;
       } catch (error) {
         throw toApiError(error);
       }

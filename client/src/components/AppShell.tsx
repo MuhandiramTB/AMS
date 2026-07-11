@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
@@ -103,8 +103,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </ul>
         </nav>
 
-        <div className="border-t border-[var(--color-line)] p-3 text-[0.68rem] text-[var(--color-muted-soft)]">
-          Enterprise Time &amp; Attendance
+        {/* Sign out at the bottom of the sidebar (requested placement). */}
+        <div className="border-t border-[var(--color-line)] p-3">
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium text-[var(--color-ink-soft)] transition-colors hover:bg-[var(--color-absent-bg)] hover:text-[var(--color-danger)]"
+          >
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            Sign out
+          </button>
         </div>
       </aside>
 
@@ -114,27 +121,59 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* Mobile brand (sidebar hidden on small screens) */}
           <span className="text-sm font-bold text-[var(--color-ink)] md:hidden">TAMS</span>
           <div className="flex-1" />
-          <div className="flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <div className="text-sm font-semibold text-[var(--color-ink)]">{user?.userName}</div>
-              {user?.roles.length ? <div className="text-xs text-[var(--color-muted)]">{user.roles.join(', ')}</div> : null}
-            </div>
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--color-brand-100)] text-sm font-bold text-[var(--color-brand-700)]" aria-hidden="true">
-              {initials(user?.userName)}
-            </span>
-            <button
-              onClick={logout}
-              className="rounded-[var(--radius-md)] px-3 py-1.5 text-sm font-semibold text-[var(--color-muted)] ring-1 ring-inset ring-[var(--color-line)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-ink)]"
-            >
-              Log out
-            </button>
-          </div>
+          <ProfileMenu userName={user?.userName} roles={user?.roles ?? []} onLogout={logout} />
         </header>
 
         <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto px-4 py-6 md:px-8 md:py-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
+    </div>
+  );
+}
+
+/** Header profile icon that opens a small dropdown (identity + sign out). */
+function ProfileMenu({ userName, roles, onLogout }: { userName?: string; roles: string[]; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+        className="grid h-9 w-9 place-items-center rounded-full bg-[var(--color-brand-100)] text-sm font-bold text-[var(--color-brand-700)] ring-1 ring-inset ring-[var(--color-brand-200)] transition-shadow hover:shadow-[var(--shadow-card)]"
+      >
+        {initials(userName)}
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]">
+          <div className="border-b border-[var(--color-line-soft)] px-4 py-3">
+            <div className="text-sm font-semibold text-[var(--color-ink)]">{userName}</div>
+            {roles.length > 0 && <div className="mt-0.5 text-xs text-[var(--color-muted)]">{roles.join(', ')}</div>}
+          </div>
+          <button
+            role="menuitem"
+            onClick={() => { setOpen(false); onLogout(); }}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-[var(--color-ink-soft)] transition-colors hover:bg-[var(--color-absent-bg)] hover:text-[var(--color-danger)]"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            Sign out
+          </button>
+        </div>
+      )}
     </div>
   );
 }

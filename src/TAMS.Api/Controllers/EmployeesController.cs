@@ -64,4 +64,30 @@ public sealed class EmployeesController : ApiControllerBase
 
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
+
+    public sealed record UpdateEmployeeRequest(string FirstName, string LastName, string? Email, long PrimaryDepartmentId);
+
+    /// <summary>PUT /api/v1/employees/{id} — update editable details. (FR-EMP-004.)</summary>
+    [HttpPut("{id:long}")]
+    [HasPermission(Permissions.EmployeeWrite)]
+    [ProducesResponseType(typeof(EmployeeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EmployeeDto>> Update(long id, [FromBody] UpdateEmployeeRequest request, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new UpdateEmployeeCommand(id, request.FirstName, request.LastName, request.Email, request.PrimaryDepartmentId), cancellationToken));
+
+    public sealed record SetActiveRequest(string? Reason);
+
+    /// <summary>POST /api/v1/employees/{id}/activate. (FR-EMP-005.)</summary>
+    [HttpPost("{id:long}/activate")]
+    [HasPermission(Permissions.EmployeeWrite)]
+    [ProducesResponseType(typeof(EmployeeDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<EmployeeDto>> Activate(long id, [FromBody] SetActiveRequest? request, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new SetEmployeeActiveCommand(id, true, request?.Reason), cancellationToken));
+
+    /// <summary>POST /api/v1/employees/{id}/deactivate. (FR-EMP-005.)</summary>
+    [HttpPost("{id:long}/deactivate")]
+    [HasPermission(Permissions.EmployeeWrite)]
+    [ProducesResponseType(typeof(EmployeeDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<EmployeeDto>> Deactivate(long id, [FromBody] SetActiveRequest? request, CancellationToken cancellationToken)
+        => Ok(await Mediator.Send(new SetEmployeeActiveCommand(id, false, request?.Reason), cancellationToken));
 }

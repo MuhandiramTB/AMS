@@ -93,4 +93,28 @@ public sealed class Shift : AuditableEntity
     }
 
     public void Deactivate() => IsActive = false;
+    public void Reactivate() => IsActive = true;
+
+    /// <summary>Updates the editable shift rule values. Code is immutable. (FR-SFT-002.)</summary>
+    public void UpdateDetails(
+        string name, TimeOnly startTime, TimeOnly endTime,
+        int breakMinutes, int graceInMinutes, int graceOutMinutes, int overtimeThresholdMinutes)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new DomainException("Shift name is required.");
+        }
+        if (breakMinutes < 0 || graceInMinutes < 0 || graceOutMinutes < 0 || overtimeThresholdMinutes < 0)
+        {
+            throw new DomainException("Shift minute values cannot be negative.");
+        }
+
+        Name = name.Trim();
+        StartTime = startTime;
+        EndTime = endTime;
+        BreakMinutes = breakMinutes;
+        GraceInMinutes = graceInMinutes;
+        GraceOutMinutes = graceOutMinutes;
+        OvertimeThresholdMinutes = overtimeThresholdMinutes;
+    }
 }

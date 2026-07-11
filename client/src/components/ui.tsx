@@ -1,5 +1,5 @@
 import type { ReactNode, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 /* ===========================================================================
    TAMS component library (08 §6.2). Accessible by construction, consuming the
@@ -162,16 +162,26 @@ export function StatTile({
    Form controls — labelled Field wrapper + styled Input / Select / Textarea
    -------------------------------------------------------------------------- */
 export function Field({
-  id, label, error, hint, children, className = '',
+  id, label, error, hint, required = false, children, className = '',
 }: {
-  id: string; label: string; error?: string; hint?: string; children: ReactNode; className?: string;
+  id: string; label: string; error?: string; hint?: string; required?: boolean; children: ReactNode; className?: string;
 }) {
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium text-[var(--color-ink-soft)]">{label}</label>
+      {/* The asterisk sits OUTSIDE the <label> so the label's accessible name
+          stays exactly the field name (getByLabelText matches on label text). */}
+      <div className="mb-1 flex items-center gap-0.5">
+        <label htmlFor={id} className="block text-sm font-medium text-[var(--color-ink-soft)]">{label}</label>
+        {required && <span className="text-[var(--color-danger)]" title="Required" aria-hidden="true">*</span>}
+      </div>
       {children}
       {hint && !error && <p className="mt-1 text-xs text-[var(--color-muted-soft)]">{hint}</p>}
-      {error && <p id={`${id}-err`} role="alert" className="mt-1 text-xs font-medium text-[var(--color-danger)]">{error}</p>}
+      {error && (
+        <p id={`${id}-err`} role="alert" className="mt-1 flex items-center gap-1 text-xs font-medium text-[var(--color-danger)]">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" strokeLinecap="round" /></svg>
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -400,6 +410,142 @@ function ToastItem({ toast, onDone }: { toast: Toast; onDone: () => void }) {
       className={`animate-rise pointer-events-auto flex min-w-[240px] max-w-sm items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-line)] border-l-4 bg-white px-4 py-3 text-sm text-[var(--color-ink)] shadow-[var(--shadow-pop)] ${tones[toast.tone]}`}
     >
       {toast.message}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   Modal — accessible centered dialog with focus trap, Escape-to-close and
+   focus restore. Used for edit forms and confirmations (08 §6.2). Reuses the
+   same dialog semantics as the attendance correction drawer.
+   -------------------------------------------------------------------------- */
+export function Modal({
+  title, onClose, children, footer, size = 'md',
+}: {
+  title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: 'sm' | 'md' | 'lg';
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = useRef(`modal-${Math.round(performance.now())}`).current;
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    // Focus the first focusable control in the dialog.
+    ref.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const f = ref.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])');
+      if (!f || f.length === 0) return;
+      const first = f[0]; const last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previouslyFocused?.focus(); };
+  }, [onClose]);
+
+  const widths: Record<string, string> = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+      {/* Backdrop — click to dismiss. */}
+      <div className="absolute inset-0 bg-[var(--color-ink)]/40 backdrop-blur-[1px]" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={`animate-rise relative w-full ${widths[size]} rounded-[var(--radius-lg)] border border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]`}
+      >
+        <div className="flex items-center justify-between border-b border-[var(--color-line-soft)] px-5 py-3.5">
+          <h2 id={titleId} className="text-base font-bold tracking-tight text-[var(--color-ink)]">{title}</h2>
+          <button onClick={onClose} aria-label="Close" className="rounded-[var(--radius-md)] p-1 text-[var(--color-muted-soft)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-ink)]">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+        <div className="px-5 py-4">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t border-[var(--color-line-soft)] px-5 py-3.5">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ConfirmDialog — a small confirmation modal for destructive/irreversible
+ * actions. `tone="danger"` styles the confirm button as destructive.
+ */
+export function ConfirmDialog({
+  title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', tone = 'primary', loading = false, onConfirm, onCancel,
+}: {
+  title: string; message: ReactNode; confirmLabel?: string; cancelLabel?: string;
+  tone?: 'primary' | 'danger'; loading?: boolean; onConfirm: () => void; onCancel: () => void;
+}) {
+  return (
+    <Modal
+      title={title}
+      onClose={onCancel}
+      size="sm"
+      footer={
+        <>
+          <Button onClick={onCancel}>{cancelLabel}</Button>
+          <Button variant={tone} loading={loading} onClick={onConfirm}>{confirmLabel}</Button>
+        </>
+      }
+    >
+      <p className="text-sm text-[var(--color-ink-soft)]">{message}</p>
+    </Modal>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   RowActions — a kebab (⋮) menu of per-row actions for a data table.
+   -------------------------------------------------------------------------- */
+export type RowAction = { label: string; onClick: () => void; tone?: 'default' | 'danger'; icon?: ReactNode };
+
+export function RowActions({ actions, label = 'Row actions' }: { actions: RowAction[]; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  if (actions.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative inline-block text-left">
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-ink)]"
+      >
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></svg>
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-20 mt-1 min-w-40 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-surface)] py-1 shadow-[var(--shadow-pop)]">
+          {actions.map((a) => (
+            <button
+              key={a.label}
+              role="menuitem"
+              type="button"
+              onClick={() => { setOpen(false); a.onClick(); }}
+              className={`flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface-2)] ${a.tone === 'danger' ? 'text-[var(--color-danger)]' : 'text-[var(--color-ink-soft)]'}`}
+            >
+              {a.icon}
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

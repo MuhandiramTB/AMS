@@ -18,6 +18,7 @@ import {
   AsyncView,
   Button,
   Card,
+  ConfirmDialog,
   DataTable,
   Field,
   Input,
@@ -155,6 +156,7 @@ function DeviceRow({
   const enable = useEnableDevice();
   const disable = useDisableDevice();
   const online = isOnline(device);
+  const [confirmToggle, setConfirmToggle] = useState(false);
 
   const run = async (fn: () => Promise<unknown>, describe: (r: unknown) => string) => {
     try {
@@ -163,6 +165,15 @@ function DeviceRow({
     } catch (e) {
       onMessage(e instanceof ApiError ? e.message : 'Action failed.');
     }
+  };
+
+  const doToggle = async () => {
+    if (device.isEnabled) {
+      await run(() => disable.mutateAsync(device.id), () => 'Device disabled.');
+    } else {
+      await run(() => enable.mutateAsync(device.id), () => 'Device enabled.');
+    }
+    setConfirmToggle(false);
   };
 
   return (
@@ -236,28 +247,32 @@ function DeviceRow({
                 Reconcile
               </Button>
               {device.isEnabled ? (
-                <Button
-                  size="sm"
-                  variant="danger"
-                  loading={disable.isPending}
-                  onClick={() => run(() => disable.mutateAsync(device.id), () => 'Device disabled.')}
-                >
-                  Disable
-                </Button>
+                <Button size="sm" variant="danger" onClick={() => setConfirmToggle(true)}>Disable</Button>
               ) : (
-                <Button
-                  size="sm"
-                  variant="primary"
-                  loading={enable.isPending}
-                  onClick={() => run(() => enable.mutateAsync(device.id), () => 'Device enabled.')}
-                >
-                  Enable
-                </Button>
+                <Button size="sm" variant="primary" onClick={() => setConfirmToggle(true)}>Enable</Button>
               )}
             </>
           )}
         </div>
       </Td>
+
+      {confirmToggle && (
+        <td className="hidden">
+          <ConfirmDialog
+            title={device.isEnabled ? 'Disable device?' : 'Enable device?'}
+            tone={device.isEnabled ? 'danger' : 'primary'}
+            confirmLabel={device.isEnabled ? 'Disable' : 'Enable'}
+            loading={enable.isPending || disable.isPending}
+            message={
+              device.isEnabled
+                ? <>Disable <strong>{device.name}</strong>? The worker will stop polling it for punches.</>
+                : <>Enable <strong>{device.name}</strong>? The worker will resume polling it.</>
+            }
+            onConfirm={doToggle}
+            onCancel={() => setConfirmToggle(false)}
+          />
+        </td>
+      )}
     </Tr>
   );
 }
