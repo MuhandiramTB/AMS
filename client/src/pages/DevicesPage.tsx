@@ -15,25 +15,27 @@ import {
 } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { useDebounced } from '../lib/useDebounced';
 import {
   AsyncView,
+  ActionIcons,
   Button,
   Card,
   ConfirmDialog,
   DataTable,
   Field,
+  IconButton,
   Input,
+  Modal,
   PageHeader,
   SearchInput,
-  Select,
+  SearchableSelect,
   StatusPill,
   Td,
   Th,
   Toolbar,
   Tr,
 } from '../components/ui';
-import type { Device } from '../api/types';
+import type { Device, ReconcileResult, SyncDeviceResult, TestConnectionResult } from '../api/types';
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'never';
@@ -50,6 +52,42 @@ function relativeTime(iso: string | null): string {
 function isOnline(d: Device): boolean {
   if (!d.lastSeenUtc) return false;
   return Date.now() - new Date(d.lastSeenUtc).getTime() < 2 * 60 * 1000;
+}
+
+// The outcome of a device action, shown in a result popup.
+type ActionResult = {
+  title: string;
+  tone: 'success' | 'warning' | 'danger';
+  headline: string;
+  rows: [string, string][];
+};
+
+/** Popup showing the detailed result of a Sync / Test / Reconcile action. */
+function ResultModal({ result, onClose }: { result: ActionResult; onClose: () => void }) {
+  const toneStyles: Record<ActionResult['tone'], { bg: string; fg: string; icon: string }> = {
+    success: { bg: 'var(--color-present-bg)', fg: 'var(--color-present)', icon: 'M20 6L9 17l-5-5' },
+    warning: { bg: 'var(--color-late-bg)', fg: 'var(--color-late)', icon: 'M12 9v4M12 17h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z' },
+    danger: { bg: 'var(--color-absent-bg)', fg: 'var(--color-absent)', icon: 'M18 6L6 18M6 6l12 12' },
+  };
+  const s = toneStyles[result.tone];
+  return (
+    <Modal title={result.title} onClose={onClose} size="sm" footer={<Button variant="primary" onClick={onClose}>Close</Button>}>
+      <div className="mb-4 flex items-center gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full" style={{ background: s.bg, color: s.fg }} aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><path d={s.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </span>
+        <p className="text-sm font-semibold text-[var(--color-ink)]">{result.headline}</p>
+      </div>
+      <dl className="divide-y divide-[var(--color-line-soft)] rounded-[var(--radius-md)] border border-[var(--color-line-soft)]">
+        {result.rows.map(([k, v]) => (
+          <div key={k} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+            <dt className="text-[var(--color-muted)]">{k}</dt>
+            <dd className="tabular font-medium text-[var(--color-ink-soft)]">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </Modal>
+  );
 }
 
 export function DevicesPage() {
@@ -160,21 +198,24 @@ function DeviceRow({
   const disable = useDisableDevice();
   const online = isOnline(device);
   const [confirmToggle, setConfirmToggle] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
-  const run = async (fn: () => Promise<unknown>, describe: (r: unknown) => string) => {
+  // Run an action and show its outcome in a popup (title, tone, detail rows).
+  const runAction = async (title: string, fn: () => Promise<unknown>, describe: (r: unknown) => ActionResult) => {
     try {
       const r = await fn();
-      onMessage(describe(r));
+      setResult(describe(r));
     } catch (e) {
-      onMessage(e instanceof ApiError ? e.message : 'Action failed.');
+      setResult({ title, tone: 'danger', headline: 'Action failed', rows: [['Error', e instanceof ApiError ? e.message : 'Unknown error']] });
     }
   };
 
   const doToggle = async () => {
-    if (device.isEnabled) {
-      await run(() => disable.mutateAsync(device.id), () => 'Device disabled.');
-    } else {
-      await run(() => enable.mutateAsync(device.id), () => 'Device enabled.');
+    try {
+      if (device.isEnabled) { await disable.mutateAsync(device.id); onMessage('Device disabled.'); }
+      else { await enable.mutateAsync(device.id); onMessage('Device enabled.'); }
+    } catch (e) {
+      onMessage(e instanceof ApiError ? e.message : 'Action failed.');
     }
     setConfirmToggle(false);
   };
@@ -204,60 +245,79 @@ function DeviceRow({
         <div className="flex flex-wrap gap-1.5">
           {canManage && (
             <>
-              <Button
-                size="sm"
-                loading={sync.isPending}
+              <IconButton
+                label="Sync"
+                disabled={sync.isPending}
+                icon={ActionIcons.sync}
                 onClick={() =>
-                  run(
-                    () => sync.mutateAsync(device.id),
-                    (r) => {
-                      const s = r as { ingested: number; reachable: boolean };
-                      return s.reachable ? `Synced: ${s.ingested} ingested.` : 'Device unreachable.';
-                    },
-                  )
+                  runAction('Sync', () => sync.mutateAsync(device.id), (r) => {
+                    const s = r as SyncDeviceResult;
+                    return s.reachable
+                      ? {
+                          title: 'Sync complete', tone: 'success',
+                          headline: `${s.ingested} ingested`,
+                          rows: [
+                            ['Downloaded', String(s.downloaded)],
+                            ['Ingested', String(s.ingested)],
+                            ['Duplicates (skipped)', String(s.duplicates)],
+                            ['Unresolved', String(s.unresolved)],
+                            ['Watermark advanced', s.watermarkAdvanced ? 'Yes' : 'No'],
+                          ],
+                        }
+                      : { title: 'Sync', tone: 'danger', headline: 'Device unreachable', rows: [['Ingested', '0'], ['Watermark', 'Preserved — nothing lost']] };
+                  })
                 }
-              >
-                Sync
-              </Button>
-              <Button
-                size="sm"
-                loading={test.isPending}
+              />
+              <IconButton
+                label="Test connection"
+                disabled={test.isPending}
+                icon={ActionIcons.test}
                 onClick={() =>
-                  run(
-                    () => test.mutateAsync(device.id),
-                    (r) => {
-                      const s = r as { reachable: boolean };
-                      return s.reachable ? 'Reachable.' : 'Unreachable.';
-                    },
-                  )
+                  runAction('Test connection', () => test.mutateAsync(device.id), (r) => {
+                    const s = r as TestConnectionResult;
+                    return {
+                      title: 'Connection test', tone: s.reachable ? 'success' : 'danger',
+                      headline: s.reachable ? 'Device reachable' : 'Device unreachable',
+                      rows: [['Result', s.reachable ? 'Online' : 'Offline'], ['Message', s.message ?? '—']],
+                    };
+                  })
                 }
-              >
-                Test
-              </Button>
-              <Button
-                size="sm"
-                loading={reconcile.isPending}
+              />
+              <IconButton
+                label="Reconcile"
+                disabled={reconcile.isPending}
+                icon={ActionIcons.reconcile}
                 onClick={() =>
-                  run(
-                    () => reconcile.mutateAsync(device.id),
-                    (r) => {
-                      const s = r as { clean: boolean; missingCount: number };
-                      return s.clean ? 'Reconciliation clean.' : `Gap: ${s.missingCount} missing!`;
-                    },
-                  )
+                  runAction('Reconcile', () => reconcile.mutateAsync(device.id), (r) => {
+                    const s = r as ReconcileResult;
+                    return {
+                      title: 'Reconciliation', tone: s.clean ? 'success' : 'warning',
+                      headline: s.clean ? 'Clean — device and records match' : `Gap: ${s.missingCount} missing`,
+                      rows: [
+                        ['On device', String(s.deviceCount)],
+                        ['Stored', String(s.storedCount)],
+                        ['Missing', String(s.missingCount)],
+                        ['Extra', String(s.extraCount)],
+                      ],
+                    };
+                  })
                 }
-              >
-                Reconcile
-              </Button>
+              />
               {device.isEnabled ? (
-                <Button size="sm" variant="danger" onClick={() => setConfirmToggle(true)}>Disable</Button>
+                <IconButton label="Disable device" tone="danger" icon={ActionIcons.power} onClick={() => setConfirmToggle(true)} />
               ) : (
-                <Button size="sm" variant="primary" onClick={() => setConfirmToggle(true)}>Enable</Button>
+                <IconButton label="Enable device" tone="success" icon={ActionIcons.power} onClick={() => setConfirmToggle(true)} />
               )}
             </>
           )}
         </div>
       </Td>
+
+      {result && (
+        <td className="hidden">
+          <ResultModal result={result} onClose={() => setResult(null)} />
+        </td>
+      )}
 
       {confirmToggle && (
         <td className="hidden">
@@ -357,26 +417,30 @@ function EnrollmentPanel({
 }) {
   const enrollments = useDeviceEnrollments(device.id);
   const enroll = useEnrollEmployee();
-  const form = useForm<{ employeeId: string; deviceUserId: string }>();
+  const form = useForm<{ deviceUserId: string }>();
   const [err, setErr] = useState<string | null>(null);
 
-  // Employee picker: search by name/number (server-side) → choose from a dropdown,
-  // so an admin never has to know the raw employee id.
-  const [empSearch, setEmpSearch] = useState('');
-  const debounced = useDebounced(empSearch);
-  const employees = useEmployees(1, 50, undefined, debounced);
-  const employeeList = employees.data?.items ?? [];
+  // ONE searchable employee dropdown (type to filter, click to pick). We load the
+  // roster once and the Combobox filters it in-place — no separate search box.
+  const [employeeId, setEmployeeId] = useState('');
+  // The API caps pageSize at 100; load the first page as the dropdown source.
+  const employees = useEmployees(1, 100);
+  const employeeOptions = (employees.data?.items ?? []).map((e) => ({
+    value: String(e.id),
+    label: `${e.employeeNo} — ${e.firstName} ${e.lastName}`,
+  }));
 
   const onSubmit = form.handleSubmit(async (values) => {
     setErr(null);
+    if (!employeeId) { setErr('Choose an employee.'); return; }
     try {
       await enroll.mutateAsync({
         deviceId: device.id,
-        employeeId: Number(values.employeeId),
+        employeeId: Number(employeeId),
         deviceUserId: values.deviceUserId,
       });
       form.reset();
-      setEmpSearch('');
+      setEmployeeId('');
       onMessage('Employee enrolled.');
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Enrollment failed.');
@@ -385,45 +449,46 @@ function EnrollmentPanel({
 
   return (
     <Card className="mt-6">
-      <h2 className="mb-1 text-base font-semibold text-[var(--color-ink)]">
-        Enrollments — {device.name}
-      </h2>
-      <p className="mb-4 text-xs text-[var(--color-muted)]">
-        Link an employee to the ID their fingerprint was registered under on this device.
-      </p>
+      <div className="mb-4 flex items-center gap-2">
+        <span className="grid h-8 w-8 place-items-center rounded-[var(--radius-md)] bg-[var(--hdr-devices-bg)] text-[var(--hdr-devices-fg)]" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0111 0M17 8h4M19 6v4" strokeLinecap="round" /></svg>
+        </span>
+        <div>
+          <h2 className="text-base font-semibold leading-tight text-[var(--color-ink)]">Enrollments — {device.name}</h2>
+          <p className="text-xs text-[var(--color-muted)]">Match an employee to the user ID their fingerprint uses on this device.</p>
+        </div>
+      </div>
 
       {canManage && (
-        <form onSubmit={onSubmit} className="mb-5 flex flex-wrap items-end gap-3">
-          <SearchInput
-            value={empSearch}
-            onChange={setEmpSearch}
-            label="Find employee"
-            placeholder="Name or employee no…"
-            className="min-w-56 flex-none"
-          />
-          <Field id="enr-emp" label="Employee" className="w-56">
-            <Select id="enr-emp" {...form.register('employeeId', { required: true })}>
-              <option value="">Select employee…</option>
-              {employeeList.map((e) => (
-                <option key={e.id} value={e.id}>{e.employeeNo} — {e.firstName} {e.lastName}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field id="enr-user" label="Device user ID" className="w-40" hint="The number from the device">
-            <Input
-              id="enr-user"
-              aria-label="Device user ID"
-              placeholder="e.g. 5"
-              {...form.register('deviceUserId', { required: true })}
-            />
-          </Field>
-          <Button type="submit" variant="primary" loading={enroll.isPending}>
-            Enroll
-          </Button>
+        <form onSubmit={onSubmit} className="mb-6 rounded-[var(--radius-lg)] border border-[var(--color-line)] bg-[var(--color-surface-2)] p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field id="enr-emp" label="Employee" className="w-72">
+              <SearchableSelect
+                id="enr-emp"
+                options={employeeOptions}
+                value={employeeId}
+                onChange={setEmployeeId}
+                placeholder="Select employee…"
+                searchPlaceholder="Search by name or no…"
+                emptyText="No matching employee"
+              />
+            </Field>
+            <Field id="enr-user" label="Device user ID" className="w-32" hint="From the device">
+              <Input
+                id="enr-user"
+                aria-label="Device user ID"
+                placeholder="e.g. 5"
+                {...form.register('deviceUserId', { required: true })}
+              />
+            </Field>
+            <Button type="submit" variant="primary" loading={enroll.isPending}>
+              Enroll
+            </Button>
+          </div>
           {err && (
-            <span role="alert" className="text-sm font-medium text-[var(--color-danger)]">
+            <p role="alert" className="mt-3 text-sm font-medium text-[var(--color-danger)]">
               {err}
-            </span>
+            </p>
           )}
         </form>
       )}

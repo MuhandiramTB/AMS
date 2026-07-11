@@ -612,4 +612,117 @@ export const ActionIcons = {
       <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  sync: (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M21 2v6h-6M3 22v-6h6M21 8a9 9 0 00-15-3.5L3 8M3 16a9 9 0 0015 3.5l3-3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  test: (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M5 12.5l4 4 10-10" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="10" opacity="0.35" />
+    </svg>
+  ),
+  reconcile: (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M9 11l3 3 8-8M4 4v7h7M4 20a8 8 0 0014-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  power: (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M18.36 6.64a9 9 0 11-12.73 0M12 2v10" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 } as const;
+
+/* --------------------------------------------------------------------------
+   SearchableSelect — a dropdown that opens a panel with a SEARCH BOX at the top
+   and the filtered options below. Looks/behaves like a normal select, but you
+   can type to narrow a long list. Controlled via `value` + `onChange`.
+   -------------------------------------------------------------------------- */
+export type SelectOption = { value: string; label: string };
+
+export function SearchableSelect({
+  options, value, onChange, placeholder = 'Select…', searchPlaceholder = 'Search…', id, emptyText = 'No matches',
+}: {
+  options: SelectOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  id?: string;
+  emptyText?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const selected = options.find((o) => o.value === value);
+  const filtered = query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
+
+  useEffect(() => {
+    if (!open) return;
+    searchRef.current?.focus();
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      {/* The closed control — looks like a normal select. */}
+      <button
+        id={id}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => { setOpen((v) => !v); setQuery(''); }}
+        className={`flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--color-line)] bg-white px-3 py-2 text-left text-sm transition-colors focus:border-[var(--color-brand-600)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-600)]/20 ${selected ? 'text-[var(--color-ink)]' : 'text-[var(--color-muted-soft)]'}`}
+      >
+        <span className="truncate">{selected?.label ?? placeholder}</span>
+        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[var(--color-muted-soft)]" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]">
+          {/* Search box inside the dropdown panel. */}
+          <div className="border-b border-[var(--color-line-soft)] p-2">
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-[var(--color-muted-soft)]" aria-hidden="true">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" strokeLinecap="round" /></svg>
+              </span>
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                placeholder={searchPlaceholder}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-white py-1.5 pl-8 pr-3 text-sm focus:border-[var(--color-brand-600)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-600)]/20"
+              />
+            </div>
+          </div>
+          <ul role="listbox" className="max-h-56 overflow-auto py-1">
+            {filtered.length === 0 && <li className="px-3 py-2 text-sm text-[var(--color-muted-soft)]">{emptyText}</li>}
+            {filtered.map((opt) => (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={opt.value === value}
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className={`cursor-pointer px-3 py-2 text-sm hover:bg-[var(--color-surface-2)] ${
+                  opt.value === value ? 'bg-[var(--color-brand-50)] font-medium text-[var(--color-brand-700)]' : 'text-[var(--color-ink-soft)]'
+                }`}
+              >
+                {opt.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
