@@ -7,6 +7,23 @@ using TAMS.Domain.Leave;
 
 namespace TAMS.Application.Leave;
 
+/// <summary>Splits a leave date range into (year, day-count) buckets, so a request
+/// spanning a year boundary charges/releases each year's balance for its own days
+/// rather than the whole request against the start year. (BRULE-07.)</summary>
+internal static class LeaveYearSplit
+{
+    public static IReadOnlyList<(short Year, int Days)> DaysByYear(DateOnly start, DateOnly end)
+    {
+        var buckets = new Dictionary<short, int>();
+        for (var d = start; d <= end; d = d.AddDays(1))
+        {
+            var y = (short)d.Year;
+            buckets[y] = buckets.GetValueOrDefault(y) + 1;
+        }
+        return buckets.Select(kv => (kv.Key, kv.Value)).ToList();
+    }
+}
+
 // --- Approve leave (FR-LV-002/004/005, BRULE-06/07) ---
 public sealed record ApproveLeaveCommand(long RequestId, long ApproverUserId, bool AllowOverride = false)
     : IRequest<LeaveRequestDto>;
@@ -31,38 +48,54 @@ public sealed class ApproveLeaveHandler : IRequestHandler<ApproveLeaveCommand, L
         var leaveRequest = await _leave.GetRequestByIdAsync(request.RequestId, cancellationToken)
             ?? throw new NotFoundException("LeaveRequest", request.RequestId);
 
-        // Balance enforcement (BRULE-07): block approval beyond remaining unless overridden.
-        var year = (short)leaveRequest.StartDate.Year;
-        var balance = await _leave.GetBalanceAsync(
-            leaveRequest.EmployeeId, leaveRequest.LeaveTypeId, year, cancellationToken);
-
-        if (balance is null)
+        // Balance enforcement (BRULE-07): charge each calendar year the days that fall
+        // in it, so a request spanning a year boundary hits the right year's balance.
+        var perYear = LeaveYearSplit.DaysByYear(leaveRequest.StartDate, leaveRequest.EndDate);
+        var balances = new List<(Domain.Leave.LeaveBalance? Balance, int Days)>();
+        foreach (var (year, days) in perYear)
         {
-            if (!request.AllowOverride)
+            var balance = await _leave.GetBalanceAsync(
+                leaveRequest.EmployeeId, leaveRequest.LeaveTypeId, year, cancellationToken);
+
+            if (balance is null)
+            {
+                if (!request.AllowOverride)
+                {
+                    throw new BusinessRuleException(
+                        $"No {year} leave balance is set for this employee/type; approval requires an override.");
+                }
+            }
+            else if (!request.AllowOverride && !balance.CanConsume(days))
             {
                 throw new BusinessRuleException(
-                    "No leave balance is set for this employee/type/year; approval requires an override.");
+                    $"Insufficient {year} leave balance: requested {days}, remaining {balance.RemainingDays}.");
             }
+            balances.Add((balance, days));
         }
-        else if (!request.AllowOverride && !balance.CanConsume(leaveRequest.DayCount))
+
+        // Approve, consume balances, reprocess covered days, and mark applied all in ONE
+        // transaction. Previously the balance consumption committed on its own SaveChanges;
+        // if a later attendance reprocess threw, the balance stayed charged with the request
+        // never applied. Wrapping keeps the whole decision atomic. (07 §4.2.)
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new BusinessRuleException(
-                $"Insufficient leave balance: requested {leaveRequest.DayCount}, remaining {balance.RemainingDays}.");
-        }
+            leaveRequest.Approve(request.ApproverUserId, _clock.UtcNow);
+            foreach (var (balance, days) in balances)
+            {
+                balance?.Consume(days, request.AllowOverride);
+            }
+            await _unitOfWork.SaveChangesAsync(ct);
 
-        leaveRequest.Approve(request.ApproverUserId, _clock.UtcNow);
-        balance?.Consume(leaveRequest.DayCount, request.AllowOverride);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            // Reprocess attendance for the covered days so approved leave overrides
+            // absence (BRULE-06, FR-ATT-007), then mark the request applied.
+            for (var d = leaveRequest.StartDate; d <= leaveRequest.EndDate; d = d.AddDays(1))
+            {
+                await _mediator.Send(new ProcessAttendanceCommand(leaveRequest.EmployeeId, d), ct);
+            }
 
-        // Reprocess attendance for the covered days so approved leave overrides
-        // absence (BRULE-06, FR-ATT-007), then mark the request applied.
-        for (var d = leaveRequest.StartDate; d <= leaveRequest.EndDate; d = d.AddDays(1))
-        {
-            await _mediator.Send(new ProcessAttendanceCommand(leaveRequest.EmployeeId, d), cancellationToken);
-        }
-
-        leaveRequest.MarkApplied();
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            leaveRequest.MarkApplied();
+            await _unitOfWork.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         return LeaveRequestDto.FromEntity(leaveRequest);
     }
@@ -123,13 +156,15 @@ public sealed class CancelLeaveHandler : IRequestHandler<CancelLeaveCommand, Lea
 
         leaveRequest.Cancel();
 
-        // Return consumed days to the balance.
+        // Return consumed days to each year's balance (mirrors the per-year charge).
         if (wasApproved)
         {
-            var year = (short)start.Year;
-            var balance = await _leave.GetBalanceAsync(
-                employeeId, leaveRequest.LeaveTypeId, year, cancellationToken);
-            balance?.Release(leaveRequest.DayCount);
+            foreach (var (year, days) in LeaveYearSplit.DaysByYear(start, end))
+            {
+                var balance = await _leave.GetBalanceAsync(
+                    employeeId, leaveRequest.LeaveTypeId, year, cancellationToken);
+                balance?.Release(days);
+            }
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

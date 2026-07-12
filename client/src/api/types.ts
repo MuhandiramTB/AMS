@@ -35,6 +35,15 @@ export interface Employee {
   isActive: boolean;
 }
 
+export interface UnresolvedPunch {
+  id: number;
+  deviceId: number;
+  deviceUserId: string;
+  punchedAtUtc: string;
+  direction: string;
+  source: string;
+}
+
 export interface PagedResult<T> {
   items: T[];
   page: number;

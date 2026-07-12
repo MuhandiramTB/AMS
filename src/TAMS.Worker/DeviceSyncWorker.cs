@@ -99,6 +99,14 @@ public sealed class DeviceSyncWorker : BackgroundService
             deviceIds = (await repo.GetEnabledAsync(stoppingToken)).Select(d => d.Id).ToList();
         }
 
+        // Drop backoff state for devices that are no longer enabled (disabled or
+        // deleted), so the skip map can't grow unbounded over the process lifetime.
+        var enabled = deviceIds.ToHashSet();
+        foreach (var stale in _skipCyclesRemaining.Keys.Where(id => !enabled.Contains(id)).ToList())
+        {
+            _skipCyclesRemaining.Remove(stale);
+        }
+
         foreach (var deviceId in deviceIds)
         {
             stoppingToken.ThrowIfCancellationRequested();

@@ -49,18 +49,42 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout, hasPermission } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
 
   // Nav is filtered by permission — the UI never advertises what the user can't
   // do; the server still enforces authorization (08 §3, 06 §5).
   const visible = NAV.filter((item) => !item.permission || hasPermission(item.permission));
 
-  // Close the mobile drawer whenever the route changes or Escape is pressed.
+  // Close the mobile drawer whenever the route changes.
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+
+  // Modal drawer focus management (WCAG 2.4.3 / 4.1.2): move focus in on open,
+  // trap Tab inside, restore focus to the opener on close, and close on Escape.
   useEffect(() => {
     if (!mobileOpen) return;
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setMobileOpen(false); }
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const firstFocusable = drawerRef.current?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+    );
+    firstFocusable?.focus();
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setMobileOpen(false); return; }
+      if (e.key !== 'Tab') return;
+      const focusable = drawerRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      previouslyFocused?.focus();
+    };
   }, [mobileOpen]);
 
   return (
@@ -82,7 +106,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-[var(--color-ink)]/40" onClick={() => setMobileOpen(false)} aria-hidden="true" />
-          <aside className="animate-rise absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]">
+          <aside
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+            className="animate-rise absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]"
+          >
             <SidebarBody items={visible} onLogout={logout} onClose={() => setMobileOpen(false)} />
           </aside>
         </div>

@@ -1,5 +1,6 @@
 import type { ReactNode, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { errorStatus } from '../api/client';
 
 /* ===========================================================================
@@ -66,7 +67,25 @@ export function AsyncView({
         </div>
       );
     }
-    return <p role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-absent-bg)] px-4 py-3 text-sm font-medium text-[var(--color-absent)]">Failed to load. Please retry.</p>;
+    // Non-403: give a status-appropriate message and, when available, a support
+    // reference (correlation id) so a report is traceable rather than opaque.
+    const detail =
+      status === 404 ? 'We couldn’t find what you were looking for.'
+      : status === 409 ? 'This changed while you were viewing it. Refresh and try again.'
+      : status && status >= 500 ? 'The server ran into a problem. Please retry shortly.'
+      : 'Failed to load. Please retry.';
+    const correlationId =
+      error && typeof error === 'object' && 'correlationId' in error
+        ? (error as { correlationId?: string }).correlationId
+        : undefined;
+    return (
+      <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-absent-bg)] px-4 py-3 text-sm text-[var(--color-absent)]">
+        <p className="font-medium">{detail}</p>
+        {correlationId && (
+          <p className="mt-0.5 text-xs text-[var(--color-absent)]/80">Reference: <span className="font-mono">{correlationId}</span></p>
+        )}
+      </div>
+    );
   }
   if (isEmpty) return <EmptyState title={emptyText ?? 'Nothing to show yet.'} />;
   return <>{children}</>;
@@ -255,8 +274,8 @@ export function Th({ children, className = '', num = false, module = 'default' }
   );
 }
 
-export function Td({ children, className = '', num = false }: { children?: ReactNode; className?: string; num?: boolean }) {
-  return <td className={`px-4 py-3 align-middle text-[var(--color-ink-soft)] ${num ? 'text-right tabular' : ''} ${className}`}>{children}</td>;
+export function Td({ children, className = '', num = false, colSpan }: { children?: ReactNode; className?: string; num?: boolean; colSpan?: number }) {
+  return <td colSpan={colSpan} className={`px-4 py-3 align-middle text-[var(--color-ink-soft)] ${num ? 'text-right tabular' : ''} ${className}`}>{children}</td>;
 }
 
 /**
@@ -388,6 +407,36 @@ export function EmptyState({ title, hint, action }: { title: string; hint?: stri
 }
 
 /* --------------------------------------------------------------------------
+   Form-level error banner — renders a mutation's top-level message plus its
+   support/correlation id, so a failed submit shows something actionable and
+   traceable rather than a silent no-op. (08 §11.)
+   -------------------------------------------------------------------------- */
+export function FormError({ error }: { error: unknown }) {
+  if (!error) return null;
+  const message =
+    error instanceof Error && error.message ? error.message : 'Something went wrong. Please try again.';
+  const correlationId =
+    error && typeof error === 'object' && 'correlationId' in error
+      ? (error as { correlationId?: string }).correlationId
+      : undefined;
+  return (
+    <div role="alert" className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-absent-bg)] px-3 py-2 text-sm text-[var(--color-absent)]">
+      <div className="flex items-start gap-2">
+        <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" strokeLinecap="round" /></svg>
+        <div>
+          <p className="font-medium">{message}</p>
+          {correlationId && (
+            <p className="mt-0.5 text-xs text-[var(--color-absent)]/80">
+              Reference: <span className="font-mono">{correlationId}</span>
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
    Toast — success/error feedback (08 §6.2 / §11). Provider + useToast().
    -------------------------------------------------------------------------- */
 type Toast = { id: number; message: string; tone: 'success' | 'error' | 'info' };
@@ -424,6 +473,8 @@ function ToastItem({ toast, onDone }: { toast: Toast; onDone: () => void }) {
   return (
     <div
       role={toast.tone === 'error' ? 'alert' : 'status'}
+      // Errors interrupt (assertive); success/info wait their turn (polite).
+      aria-live={toast.tone === 'error' ? 'assertive' : 'polite'}
       className={`animate-rise pointer-events-auto flex min-w-[240px] max-w-sm items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-line)] border-l-4 bg-white px-4 py-3 text-sm text-[var(--color-ink)] shadow-[var(--shadow-pop)] ${tones[toast.tone]}`}
     >
       {toast.message}
@@ -464,7 +515,9 @@ export function Modal({
 
   const widths: Record<string, string> = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
 
-  return (
+  // Render through a portal to <body> so the dialog is never hidden or clipped by an
+  // ancestor (e.g. a table cell with display:none, or an overflow-hidden container).
+  return createPortal(
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
       {/* Backdrop — click to dismiss. */}
       <div className="absolute inset-0 bg-[var(--color-ink)]/40 backdrop-blur-[1px]" onClick={onClose} aria-hidden="true" />
@@ -484,7 +537,8 @@ export function Modal({
         <div className="px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-[var(--color-line-soft)] px-5 py-3.5">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -643,6 +697,7 @@ export type SelectOption = { value: string; label: string };
 
 export function SearchableSelect({
   options, value, onChange, placeholder = 'Select…', searchPlaceholder = 'Search…', id, emptyText = 'No matches',
+  onSearch, truncated = false,
 }: {
   options: SelectOption[];
   value: string;
@@ -651,26 +706,43 @@ export function SearchableSelect({
   searchPlaceholder?: string;
   id?: string;
   emptyText?: string;
+  /** When provided, typing drives a SERVER-side search instead of filtering the
+      given options in-place — needed when the roster exceeds the API page cap. */
+  onSearch?: (query: string) => void;
+  /** Show a "refine your search" hint when the option list is server-capped. */
+  truncated?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [active, setActive] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const listId = useRef(`ssel-${Math.round(performance.now())}`).current;
 
   const selected = options.find((o) => o.value === value);
-  const filtered = query.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
-    : options;
+  // In server-search mode the parent already returns the matching rows, so don't
+  // filter again locally (that would hide rows whose label formatting differs).
+  const filtered = onSearch || !query.trim()
+    ? options
+    : options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()));
+
+  useEffect(() => { setActive(0); }, [query, open]);
 
   useEffect(() => {
     if (!open) return;
     searchRef.current?.focus();
     function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
     document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
+
+  // Keyboard: arrows move the active option, Enter selects it, Escape closes.
+  function onSearchKey(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); const o = filtered[active]; if (o) { onChange(o.value); setOpen(false); } }
+    else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -698,22 +770,32 @@ export function SearchableSelect({
               <input
                 ref={searchRef}
                 type="text"
+                role="combobox"
+                aria-expanded="true"
+                aria-controls={listId}
+                aria-activedescendant={filtered[active] ? `${listId}-opt-${active}` : undefined}
+                aria-autocomplete="list"
                 value={query}
                 placeholder={searchPlaceholder}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => { setQuery(e.target.value); onSearch?.(e.target.value); }}
+                onKeyDown={onSearchKey}
                 className="w-full rounded-[var(--radius-md)] border border-[var(--color-line)] bg-white py-1.5 pl-8 pr-3 text-sm focus:border-[var(--color-brand-600)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-600)]/20"
               />
             </div>
           </div>
-          <ul role="listbox" className="max-h-56 overflow-auto py-1">
+          <ul id={listId} role="listbox" className="max-h-56 overflow-auto py-1">
             {filtered.length === 0 && <li className="px-3 py-2 text-sm text-[var(--color-muted-soft)]">{emptyText}</li>}
-            {filtered.map((opt) => (
+            {filtered.map((opt, i) => (
               <li
                 key={opt.value}
+                id={`${listId}-opt-${i}`}
                 role="option"
                 aria-selected={opt.value === value}
+                onMouseEnter={() => setActive(i)}
                 onClick={() => { onChange(opt.value); setOpen(false); }}
-                className={`cursor-pointer px-3 py-2 text-sm hover:bg-[var(--color-surface-2)] ${
+                className={`cursor-pointer px-3 py-2 text-sm ${
+                  i === active ? 'bg-[var(--color-surface-2)]' : ''
+                } ${
                   opt.value === value ? 'bg-[var(--color-brand-50)] font-medium text-[var(--color-brand-700)]' : 'text-[var(--color-ink-soft)]'
                 }`}
               >
@@ -721,6 +803,11 @@ export function SearchableSelect({
               </li>
             ))}
           </ul>
+          {truncated && (
+            <div className="border-t border-[var(--color-line-soft)] px-3 py-1.5 text-xs text-[var(--color-muted-soft)]">
+              Showing the first {filtered.length}. Type to narrow the list.
+            </div>
+          )}
         </div>
       )}
     </div>

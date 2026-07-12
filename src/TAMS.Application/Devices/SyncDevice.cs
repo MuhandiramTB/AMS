@@ -80,6 +80,13 @@ public sealed class SyncDeviceHandler : IRequestHandler<SyncDeviceCommand, SyncD
             // Incremental: only transactions strictly after the watermark. (FR-ZK-002.)
             transactions = await _gateway.DownloadTransactionsAsync(connection, state.LastWatermarkUtc, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Caller-initiated cancellation (host shutdown / request abort) is NOT a device
+            // outage — do not count it against the device or fire an unreachable alert.
+            // Leave the watermark and failure count untouched and propagate. (FR-ZK-011.)
+            throw;
+        }
         catch (Exception ex)
         {
             // Outage: record the failure, DO NOT advance the watermark, maybe alert.

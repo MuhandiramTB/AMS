@@ -57,6 +57,17 @@ public sealed class AttendanceController : ApiControllerBase
         => Ok(await Mediator.Send(
             new GetAttendanceRecordsQuery(page, pageSize, employeeId, fromDate, toDate), cancellationToken));
 
+    [HttpGet("unresolved-punches")]
+    [HasPermission(Permissions.DeviceManage)]
+    [ProducesResponseType(typeof(PagedResult<UnresolvedPunchDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<UnresolvedPunchDto>>> GetUnresolvedPunches(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] long? deviceId = null,
+        CancellationToken cancellationToken = default)
+        => Ok(await Mediator.Send(
+            new GetUnresolvedPunchesQuery(page, pageSize, deviceId), cancellationToken));
+
     [HttpGet("records/{id:long}")]
     [HasPermission(Permissions.AttendanceRead)]
     [ProducesResponseType(typeof(AttendanceRecordDto), StatusCodes.Status200OK)]

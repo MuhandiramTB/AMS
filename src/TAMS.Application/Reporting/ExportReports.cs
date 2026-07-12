@@ -1,6 +1,8 @@
 using FluentValidation;
 using MediatR;
 using TAMS.Application.Common.Ports;
+using TAMS.Application.Common.Security;
+using TAMS.Domain.Identity;
 
 namespace TAMS.Application.Reporting;
 
@@ -9,6 +11,12 @@ namespace TAMS.Application.Reporting;
 internal static class ExportLimits
 {
     public const int MaxWindowDays = 366;
+
+    /// <summary>Hard ceiling on rows materialized for a single CSV export. The date
+    /// window is already bounded, but a very large org over a full year could still
+    /// exceed a safe in-memory size; past this we fail loudly instead of OOM-ing or
+    /// silently truncating. (Perf hardening; NFR-02.)</summary>
+    public const int MaxRows = 500_000;
 }
 
 // --- Export daily attendance (CSV) — FR-RPT-004, audited FR-RPT-007 ---
@@ -38,20 +46,35 @@ public sealed class ExportDailyAttendanceHandler : IRequestHandler<ExportDailyAt
     private readonly IReportingRepository _reporting;
     private readonly IReportExporter _exporter;
     private readonly IAuditWriter _audit;
+    private readonly ICurrentUser _currentUser;
 
-    public ExportDailyAttendanceHandler(IReportingRepository reporting, IReportExporter exporter, IAuditWriter audit)
+    public ExportDailyAttendanceHandler(IReportingRepository reporting, IReportExporter exporter, IAuditWriter audit, ICurrentUser currentUser)
     {
         _reporting = reporting;
         _exporter = exporter;
         _audit = audit;
+        _currentUser = currentUser;
     }
 
     public async Task<ExportFile> Handle(ExportDailyAttendanceCommand request, CancellationToken cancellationToken)
     {
-        // Pull all matching rows (paged large) for the export.
-        var (rows, _) = await _reporting.GetDailyAttendanceAsync(
-            page: 1, pageSize: int.MaxValue, request.FromDate, request.ToDate,
-            request.EmployeeId, request.DepartmentId, request.Status, cancellationToken);
+        // Same server-derived scope as the read path — a restricted caller cannot
+        // export other employees' rows (the export was previously unscoped). (06 §5.)
+        var scope = DataScope.For(_currentUser, Permissions.AttendanceReadAll);
+        var employeeFilter = scope.ResolveEmployeeFilter(request.EmployeeId);
+
+        // Cap the page at MaxRows+1 so an oversized result is detected (total > MaxRows)
+        // without ever materializing an unbounded set into memory.
+        var (rows, total) = await _reporting.GetDailyAttendanceAsync(
+            page: 1, pageSize: ExportLimits.MaxRows + 1, request.FromDate, request.ToDate,
+            employeeFilter, scope.IsUnrestricted ? request.DepartmentId : null, request.Status, cancellationToken);
+
+        if (total > ExportLimits.MaxRows)
+        {
+            throw new Common.Exceptions.BusinessRuleException(
+                $"This export would produce {total:N0} rows, exceeding the {ExportLimits.MaxRows:N0}-row limit. " +
+                "Narrow the date range, department, or employee filter and try again.");
+        }
 
         var file = _exporter.ExportDailyAttendance(rows);
         await _audit.RecordAsync("Report.Export.DailyAttendance", "Report", file.FileName, cancellationToken);

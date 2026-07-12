@@ -59,15 +59,27 @@ public sealed class EnrollEmployeeHandler : IRequestHandler<EnrollEmployeeComman
             throw new BusinessRuleException($"Device '{request.DeviceId}' does not exist.");
         }
 
-        // BRULE-09: a device slot maps to exactly one employee.
-        if (await _devices.EnrollmentExistsAsync(request.DeviceId, request.DeviceUserId, cancellationToken))
+        // BRULE-09: a device slot maps to exactly one employee. An ACTIVE slot is a
+        // conflict; an INACTIVE slot (freed by a leaver) is re-used for the new hire —
+        // reassigning the existing row rather than inserting a duplicate (the pair is
+        // unique). This is what makes device-slot re-use work after staff turnover.
+        var existing = await _devices.GetEnrollmentBySlotAsync(request.DeviceId, request.DeviceUserId, cancellationToken);
+        EmployeeDeviceEnrollment enrollment;
+        if (existing is not null)
         {
-            throw new ConflictException(
-                $"Device user id '{request.DeviceUserId}' is already enrolled on device {request.DeviceId}.");
+            if (existing.IsActive)
+            {
+                throw new ConflictException(
+                    $"Device user id '{request.DeviceUserId}' is already enrolled on device {request.DeviceId}.");
+            }
+            existing.ReassignTo(request.EmployeeId);
+            enrollment = existing;
         }
-
-        var enrollment = new EmployeeDeviceEnrollment(request.EmployeeId, request.DeviceId, request.DeviceUserId);
-        await _devices.AddEnrollmentAsync(enrollment, cancellationToken);
+        else
+        {
+            enrollment = new EmployeeDeviceEnrollment(request.EmployeeId, request.DeviceId, request.DeviceUserId);
+            await _devices.AddEnrollmentAsync(enrollment, cancellationToken);
+        }
 
         // Back-fill any punches captured before this enrollment existed, so no
         // previously-unresolved punch is orphaned. (FR-ZK-003, BRULE-09.)

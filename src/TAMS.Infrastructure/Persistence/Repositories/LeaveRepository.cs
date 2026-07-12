@@ -56,6 +56,16 @@ public sealed class LeaveRepository : ILeaveRepository
                 && r.StartDate <= date && r.EndDate >= date)
             .ToListAsync(cancellationToken);
 
+    public Task<bool> HasOverlappingRequestAsync(
+        long employeeId, DateOnly start, DateOnly end, CancellationToken cancellationToken = default) =>
+        _db.LeaveRequests.AsNoTracking()
+            // A request still in play (not cancelled or rejected) that shares any day
+            // with [start, end] would double-book the employee. Standard interval overlap.
+            .Where(r => r.EmployeeId == employeeId
+                && r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Rejected
+                && r.StartDate <= end && r.EndDate >= start)
+            .AnyAsync(cancellationToken);
+
     // Balances
     public Task<LeaveBalance?> GetBalanceAsync(long employeeId, long leaveTypeId, short year, CancellationToken cancellationToken = default) =>
         _db.LeaveBalances.FirstOrDefaultAsync(

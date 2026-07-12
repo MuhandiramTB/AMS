@@ -23,6 +23,11 @@ public interface ILeaveRepository
     Task<IReadOnlyList<LeaveRequest>> GetCoveringLeaveAsync(
         long employeeId, DateOnly date, CancellationToken cancellationToken = default);
 
+    /// <summary>True if the employee already has a non-cancelled/non-rejected request
+    /// whose date range overlaps [start, end]. Prevents double-booking. (FR-LV-001.)</summary>
+    Task<bool> HasOverlappingRequestAsync(
+        long employeeId, DateOnly start, DateOnly end, CancellationToken cancellationToken = default);
+
     // Balances
     Task<LeaveBalance?> GetBalanceAsync(long employeeId, long leaveTypeId, short year, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LeaveBalance>> GetBalancesForEmployeeAsync(long employeeId, short year, CancellationToken cancellationToken = default);

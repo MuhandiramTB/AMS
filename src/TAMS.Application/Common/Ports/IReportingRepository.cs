@@ -54,14 +54,14 @@ public sealed record PayrollLine(
 public interface IReportingRepository
 {
     Task<AttendanceSummary> GetAttendanceSummaryAsync(
-        DateOnly workDate, long? departmentId, CancellationToken cancellationToken = default);
+        DateOnly workDate, long? departmentId, long? employeeId, CancellationToken cancellationToken = default);
 
     Task<(IReadOnlyList<DailyAttendanceRow> Items, int TotalCount)> GetDailyAttendanceAsync(
         int page, int pageSize, DateOnly? fromDate, DateOnly? toDate,
         long? employeeId, long? departmentId, string? status, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ExceptionRow>> GetOpenExceptionsAsync(
-        DateOnly? fromDate, DateOnly? toDate, long? departmentId, CancellationToken cancellationToken = default);
+        DateOnly? fromDate, DateOnly? toDate, long? departmentId, long? employeeId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PayrollLine>> GetPayrollLinesAsync(
         DateOnly fromDate, DateOnly toDate, long? departmentId, CancellationToken cancellationToken = default);

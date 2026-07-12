@@ -70,6 +70,15 @@ public sealed class RequestLeaveHandler : IRequestHandler<RequestLeaveCommand, L
             throw new BusinessRuleException($"Leave type '{request.LeaveTypeId}' does not exist.");
         }
 
+        // Reject overlapping requests up front so an employee cannot double-book the
+        // same days across two pending/approved requests. (FR-LV-001.)
+        if (await _leave.HasOverlappingRequestAsync(
+                request.EmployeeId, request.StartDate, request.EndDate, cancellationToken))
+        {
+            throw new BusinessRuleException(
+                "You already have a leave request that overlaps these dates.");
+        }
+
         var leaveRequest = new LeaveRequest(
             request.EmployeeId, request.LeaveTypeId, request.StartDate, request.EndDate, request.Reason);
         await _leave.AddRequestAsync(leaveRequest, cancellationToken);

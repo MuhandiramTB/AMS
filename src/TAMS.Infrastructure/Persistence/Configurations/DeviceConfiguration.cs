@@ -47,6 +47,9 @@ public sealed class DeviceEventLogConfiguration : IEntityTypeConfiguration<Devic
         builder.Property(x => x.Outcome).HasConversion<byte>();
         builder.Property(x => x.Message).HasMaxLength(1000);
         builder.HasIndex(x => new { x.DeviceId, x.OccurredAtUtc }).HasDatabaseName("IX_DevLog_DeviceId_OccurredAt");
+        // FK to the owning device — logs are cascade-deleted with the device so no
+        // orphan rows remain. (Referential integrity; 04 §6.4.)
+        builder.HasOne<Device>().WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 
@@ -61,10 +64,15 @@ public sealed class EmployeeDeviceEnrollmentConfiguration : IEntityTypeConfigura
         builder.Property(x => x.IsActive).HasDefaultValue(true);
         builder.Property(x => x.RowVersion).IsRowVersion();
 
-        // (device, deviceUserId) → exactly one enrollment. (BRULE-09.)
+        // (device, deviceUserId) → exactly one enrollment (active or inactive; a freed
+        // slot is reassigned in place, so the pair stays globally unique). (BRULE-09.)
         builder.HasIndex(x => new { x.DeviceId, x.DeviceUserId })
             .IsUnique().HasDatabaseName("UQ_Enroll_Device_DeviceUserId");
 
+        // Index the employee lookup used by enrollment listings + FK integrity.
+        builder.HasIndex(x => x.EmployeeId).HasDatabaseName("IX_Enroll_EmployeeId");
+
         builder.HasOne<Device>().WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<TAMS.Domain.Workforce.Employee>().WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
     }
 }

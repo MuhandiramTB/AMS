@@ -92,11 +92,13 @@ public sealed class AttendanceCalculator
             var earlyBy = (int)Math.Round((scheduledEnd - lastOut.Value).TotalMinutes) - shift.GraceOutMinutes;
             earlyLeaveMinutes = Math.Max(0, earlyBy);
 
-            // Overtime: worked beyond scheduled end, past the OT threshold.
+            // Overtime: worked beyond scheduled end. The threshold is a floor that
+            // must be crossed before ANY overtime accrues, and only the minutes past
+            // that threshold are credited (not the whole beyond-end span).
             var beyondEnd = (int)Math.Round((lastOut.Value - scheduledEnd).TotalMinutes);
             if (beyondEnd > shift.OvertimeThresholdMinutes)
             {
-                overtimeMinutes = beyondEnd;
+                overtimeMinutes = beyondEnd - shift.OvertimeThresholdMinutes;
             }
 
             // A punch-in wildly outside the shift window is flagged for review.

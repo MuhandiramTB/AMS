@@ -42,4 +42,12 @@ public interface IAttendanceRepository
     Task<(IReadOnlyList<AttendanceRecord> Items, int TotalCount)> GetRecordsPagedAsync(
         int page, int pageSize, long? employeeId, DateOnly? fromDate, DateOnly? toDate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Device punches captured but never linked to an employee (EmployeeId IS NULL),
+    /// optionally filtered by device, newest first. Read-only listing for device
+    /// admins to triage orphaned punches. (FR-ZK-003.)
+    /// </summary>
+    Task<(IReadOnlyList<PunchTransaction> Items, int TotalCount)> GetUnresolvedPunchesPagedAsync(
+        int page, int pageSize, long? deviceId, CancellationToken ct = default);
 }

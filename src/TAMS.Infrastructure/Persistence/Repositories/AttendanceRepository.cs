@@ -69,12 +69,19 @@ public sealed class AttendanceRepository : IAttendanceRepository
         return affectedDates.ToList();
     }
 
+    // The "day boundary" cutoff (UTC hour). A day owns punches from this hour up to
+    // the same hour the next calendar day, so an overnight shift's early-morning OUT
+    // (before the cutoff) is attributed to the day it started — and NEVER to the next
+    // day as well. This makes each punch belong to exactly one work day (no double
+    // attribution across the overnight boundary). (FR-ATT — overnight shifts.)
+    private static readonly TimeOnly DayBoundaryCutoff = new(4, 0);
+
     public async Task<IReadOnlyList<PunchTransaction>> GetPunchesForDayAsync(
         long employeeId, DateOnly workDate, CancellationToken cancellationToken = default)
     {
-        // Window covers the work date plus early next-day punches (overnight shifts).
-        var from = workDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var to = workDate.AddDays(1).ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
+        // [workDate 04:00, workDate+1 04:00) — a single, non-overlapping window per day.
+        var from = workDate.ToDateTime(DayBoundaryCutoff, DateTimeKind.Utc);
+        var to = workDate.AddDays(1).ToDateTime(DayBoundaryCutoff, DateTimeKind.Utc);
 
         return await _db.Punches.AsNoTracking()
             .Where(p => p.EmployeeId == employeeId && p.PunchedAtUtc >= from && p.PunchedAtUtc < to)
@@ -122,6 +129,23 @@ public sealed class AttendanceRepository : IAttendanceRepository
             .OrderByDescending(r => r.WorkDate).ThenBy(r => r.EmployeeId).ThenBy(r => r.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
+    public async Task<(IReadOnlyList<PunchTransaction> Items, int TotalCount)> GetUnresolvedPunchesPagedAsync(
+        int page, int pageSize, long? deviceId, CancellationToken ct = default)
+    {
+        var query = _db.Punches.AsNoTracking()
+            .Where(p => p.EmployeeId == null);
+
+        if (deviceId is not null) query = query.Where(p => p.DeviceId == deviceId);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(p => p.PunchedAtUtc).ThenBy(p => p.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync(ct);
 
         return (items, total);
     }

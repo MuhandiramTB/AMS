@@ -32,7 +32,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         var correlationId = httpContext.RequestServices
             .GetRequiredService<ICorrelationIdAccessor>().CorrelationId;
 
-        var (status, title, type, errors) = Map(exception);
+        var (status, title, type, errors, safeDetail) = Map(exception);
 
         if (status >= StatusCodes.Status500InternalServerError)
         {
@@ -51,9 +51,9 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             Status = status,
             Title = title,
             Type = type,
-            Detail = status >= StatusCodes.Status500InternalServerError
-                ? "An unexpected error occurred." // never leak internals
-                : exception.Message,
+            // Use the mapped safe detail (never the raw exception message for infra
+            // exceptions like DbUpdate*, which would leak schema/table/EF internals).
+            Detail = safeDetail,
             Instance = httpContext.Request.Path
         };
         problem.Extensions["correlationId"] = correlationId.ToString();
@@ -68,9 +68,12 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         return true;
     }
 
-    private static (int Status, string Title, string Type, IDictionary<string, string[]>? Errors) Map(
+    private static (int Status, string Title, string Type, IDictionary<string, string[]>? Errors, string Detail) Map(
         Exception exception)
     {
+        // Detail is only the raw exception message for OUR OWN application/domain
+        // exceptions, whose messages are authored and user-safe. Infrastructure
+        // exceptions (DbUpdate*, unknown) get a generic detail so no EF/DB internals leak.
         switch (exception)
         {
             case ValidationException v:
@@ -78,51 +81,53 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                     .GroupBy(e => e.PropertyName)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
                 return (StatusCodes.Status400BadRequest, "One or more validation errors occurred.",
-                    "https://tams/errors/validation", grouped);
+                    "https://tams/errors/validation", grouped, "One or more validation errors occurred.");
 
             case NotFoundException:
                 return (StatusCodes.Status404NotFound, "Resource not found.",
-                    "https://tams/errors/not-found", null);
+                    "https://tams/errors/not-found", null, exception.Message);
 
             case ConflictException:
                 return (StatusCodes.Status409Conflict, "Resource conflict.",
-                    "https://tams/errors/conflict", null);
+                    "https://tams/errors/conflict", null, exception.Message);
 
             case BusinessRuleException:
                 return (StatusCodes.Status422UnprocessableEntity, "Business rule violation.",
-                    "https://tams/errors/business-rule", null);
+                    "https://tams/errors/business-rule", null, exception.Message);
 
             case AuthenticationException:
                 return (StatusCodes.Status401Unauthorized, "Authentication failed.",
-                    "https://tams/errors/authentication", null);
+                    "https://tams/errors/authentication", null, exception.Message);
 
             case AccountLockedException:
                 return (StatusCodes.Status423Locked, "Account locked.",
-                    "https://tams/errors/locked", null);
+                    "https://tams/errors/locked", null, exception.Message);
 
             case ForbiddenException:
                 return (StatusCodes.Status403Forbidden, "Forbidden.",
-                    "https://tams/errors/forbidden", null);
+                    "https://tams/errors/forbidden", null, exception.Message);
 
             case ApplicationException:
                 return (StatusCodes.Status400BadRequest, "Request error.",
-                    "https://tams/errors/bad-request", null);
+                    "https://tams/errors/bad-request", null, exception.Message);
 
             // Safety net: a lost-update (RowVersion mismatch) that a handler did
             // not translate still surfaces as 409, never an opaque 500. (05 §8.)
+            // Static detail — the raw EF message must not reach the client.
             case DbUpdateConcurrencyException:
                 return (StatusCodes.Status409Conflict, "The record was modified by someone else. Reload and try again.",
-                    "https://tams/errors/concurrency", null);
+                    "https://tams/errors/concurrency", null,
+                    "The record was modified by someone else. Reload and try again.");
 
             // Safety net for uniqueness/constraint violations that slip past a
             // handler pre-check (e.g. a race on a unique index). (05 §5.)
             case DbUpdateException:
                 return (StatusCodes.Status409Conflict, "Resource conflict.",
-                    "https://tams/errors/conflict", null);
+                    "https://tams/errors/conflict", null, "The operation conflicts with existing data.");
 
             default:
                 return (StatusCodes.Status500InternalServerError, "Internal server error.",
-                    "https://tams/errors/internal", null);
+                    "https://tams/errors/internal", null, "An unexpected error occurred.");
         }
     }
 }

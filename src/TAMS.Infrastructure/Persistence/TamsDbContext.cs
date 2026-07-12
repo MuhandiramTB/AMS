@@ -84,6 +84,19 @@ public sealed class TamsDbContext : DbContext, IUnitOfWork
         // rows a prior aborted attempt left tracked as Added, (2) re-stamp/-capture
         // from the live change tracker each attempt, so a rolled-back attempt
         // cannot double-write the audit trail or miscount affected rows. (BRULE-10.)
+        // If a caller has already opened an outer transaction (ExecuteInTransactionAsync),
+        // enlist in it — do NOT open a nested one and do NOT re-run under the execution
+        // strategy (the outer strategy owns retries). Just save business + audit rows.
+        if (Database.CurrentTransaction is not null)
+        {
+            DiscardTrackedAuditEntries();
+            var capturedInner = _auditTrailBuilder.StampAndCapture(this);
+            var affectedInner = await base.SaveChangesAsync(cancellationToken); // assigns Ids
+            _auditTrailBuilder.WriteAuditEntries(this, capturedInner);
+            await base.SaveChangesAsync(cancellationToken);                     // audit rows
+            return affectedInner;
+        }
+
         var strategy = Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -99,6 +112,22 @@ public sealed class TamsDbContext : DbContext, IUnitOfWork
 
             await transaction.CommitAsync(cancellationToken);
             return affected;
+        });
+    }
+
+    /// <inheritdoc />
+    public async Task ExecuteInTransactionAsync(
+        Func<CancellationToken, Task> action, CancellationToken cancellationToken = default)
+    {
+        // Run the whole use case under one transaction and the retry execution strategy.
+        // Inner SaveChangesAsync calls detect CurrentTransaction and enlist rather than
+        // opening their own, so business + audit rows across every step commit together.
+        var strategy = Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+            await action(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         });
     }
 

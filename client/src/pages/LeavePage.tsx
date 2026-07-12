@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import {
   useApproveLeave,
   useCancelLeave,
+  useEmployeeNames,
   useLeaveBalances,
   useLeaveRequests,
   useLeaveTypes,
@@ -11,12 +12,13 @@ import {
   type RequestLeaveInput,
 } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { ApiError, applyApiFieldErrors } from '../api/client';
 import {
   AsyncView,
   Button,
   Card,
   Field,
+  FormError,
   Input,
   PageHeader,
   Select,
@@ -35,10 +37,12 @@ import type { LeaveRequest } from '../api/types';
 function statusPill(status: string) {
   switch (status) {
     case 'Approved':
+      return <StatusPill tone="success" label="Approved" />;
     case 'Applied':
-      return <StatusPill tone="success" label={status} />;
+      // Distinct from Approved: the approval has been applied to attendance.
+      return <StatusPill tone="info" label="Applied" />;
     case 'Submitted':
-      return <StatusPill tone="info" label="Submitted" />;
+      return <StatusPill tone="warning" label="Submitted" />;
     case 'Rejected':
       return <StatusPill tone="danger" label="Rejected" />;
     case 'Cancelled':
@@ -62,6 +66,9 @@ export function LeavePage() {
     ...(status ? { status } : {}),
   };
   const requests = useLeaveRequests(page, DEFAULT_PAGE_SIZE, filters);
+  const { nameFor } = useEmployeeNames();
+  const types = useLeaveTypes();
+  const typeName = (id: number) => types.data?.find((t) => t.id === id)?.name ?? `#${id}`;
   const [message, setMessage] = useState<string | null>(null);
 
   return (
@@ -103,7 +110,7 @@ export function LeavePage() {
         {(employeeId || status) && (
           <Button onClick={() => { setEmployeeId(''); setStatus(''); setPage(1); }}>Clear</Button>
         )}
-        {employeeId && <div className="flex-1 pb-1"><BalancesPanel employeeId={Number(employeeId)} /></div>}
+        {employeeId && <div className="flex-1 pb-1"><BalancesPanel employeeId={Number(employeeId)} typeName={typeName} /></div>}
       </Toolbar>
 
       <AsyncView
@@ -116,7 +123,7 @@ export function LeavePage() {
         <DataTable
           head={
             <tr>
-              <Th module="leave">Emp</Th>
+              <Th module="leave">Employee</Th>
               <Th module="leave">Type</Th>
               <Th module="leave">Dates</Th>
               <Th module="leave" num>Days</Th>
@@ -126,13 +133,21 @@ export function LeavePage() {
           }
         >
           {requests.data?.items.map((r) => (
-            <LeaveRow key={r.id} req={r} canApprove={canApprove} canRequest={canRequest} onMessage={setMessage} />
+            <LeaveRow
+              key={r.id}
+              req={r}
+              employeeName={nameFor(r.employeeId)}
+              typeName={typeName(r.leaveTypeId)}
+              canApprove={canApprove}
+              canRequest={canRequest}
+              onMessage={setMessage}
+            />
           ))}
         </DataTable>
       </AsyncView>
 
       {requests.data && (
-        <Pagination page={requests.data.page} totalPages={requests.data.totalPages} onPage={setPage} />
+        <Pagination page={requests.data.page} totalPages={requests.data.totalPages} totalCount={requests.data.totalCount} onPage={setPage} />
       )}
     </div>
   );
@@ -140,11 +155,15 @@ export function LeavePage() {
 
 function LeaveRow({
   req,
+  employeeName,
+  typeName,
   canApprove,
   canRequest,
   onMessage,
 }: {
   req: LeaveRequest;
+  employeeName: string;
+  typeName: string;
   canApprove: boolean;
   canRequest: boolean;
   onMessage: (m: string) => void;
@@ -167,8 +186,8 @@ function LeaveRow({
 
   return (
     <Tr>
-      <Td>{req.employeeId}</Td>
-      <Td>{req.leaveTypeId}</Td>
+      <Td>{employeeName}</Td>
+      <Td>{typeName}</Td>
       <Td>
         {req.startDate} → {req.endDate}
       </Td>
@@ -214,8 +233,8 @@ function LeaveRow({
 function RequestLeaveForm({ onDone }: { onDone: (m: string) => void }) {
   const types = useLeaveTypes();
   const request = useRequestLeave();
-  const { register, handleSubmit, reset } = useForm<RequestLeaveInput>();
-  const [err, setErr] = useState<string | null>(null);
+  const { register, handleSubmit, reset, setError, formState } = useForm<RequestLeaveInput>();
+  const [err, setErr] = useState<unknown>(null);
 
   const onSubmit = handleSubmit(async (v) => {
     setErr(null);
@@ -224,7 +243,8 @@ function RequestLeaveForm({ onDone }: { onDone: (m: string) => void }) {
       reset();
       onDone('Leave request submitted.');
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Failed to submit request.');
+      applyApiFieldErrors(e, setError as never, ['employeeId', 'leaveTypeId', 'startDate', 'endDate', 'reason']);
+      setErr(e);
     }
   });
 
@@ -232,11 +252,11 @@ function RequestLeaveForm({ onDone }: { onDone: (m: string) => void }) {
     <Card className="mb-6" pad>
       <form onSubmit={onSubmit}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field id="lvEmp" label="Employee ID">
-            <Input id="lvEmp" type="number" {...register('employeeId', { required: true })} />
+          <Field id="lvEmp" label="Employee ID" required error={formState.errors.employeeId?.message}>
+            <Input id="lvEmp" type="number" {...register('employeeId', { required: 'Employee ID is required.' })} />
           </Field>
-          <Field id="lvType" label="Type">
-            <Select id="lvType" {...register('leaveTypeId', { required: true })}>
+          <Field id="lvType" label="Type" required error={formState.errors.leaveTypeId?.message}>
+            <Select id="lvType" {...register('leaveTypeId', { required: 'Select a leave type.' })}>
               <option value="">Type…</option>
               {types.data?.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -245,33 +265,29 @@ function RequestLeaveForm({ onDone }: { onDone: (m: string) => void }) {
               ))}
             </Select>
           </Field>
-          <Field id="lvFrom" label="From">
-            <Input id="lvFrom" type="date" {...register('startDate', { required: true })} />
+          <Field id="lvFrom" label="From" required error={formState.errors.startDate?.message}>
+            <Input id="lvFrom" type="date" {...register('startDate', { required: 'A start date is required.' })} />
           </Field>
-          <Field id="lvTo" label="To">
-            <Input id="lvTo" type="date" {...register('endDate', { required: true })} />
+          <Field id="lvTo" label="To" required error={formState.errors.endDate?.message}>
+            <Input id="lvTo" type="date" {...register('endDate', { required: 'An end date is required.' })} />
           </Field>
-          <Field id="lvReason" label="Reason">
+          <Field id="lvReason" label="Reason" error={formState.errors.reason?.message}>
             <Input id="lvReason" {...register('reason')} />
           </Field>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-4 space-y-3">
           <Button type="submit" variant="primary" loading={request.isPending}>
             Request leave
           </Button>
-          {err && (
-            <span role="alert" className="text-sm font-medium text-[var(--color-danger)]">
-              {err}
-            </span>
-          )}
+          <FormError error={err} />
         </div>
       </form>
     </Card>
   );
 }
 
-function BalancesPanel({ employeeId }: { employeeId: number }) {
+function BalancesPanel({ employeeId, typeName }: { employeeId: number; typeName: (id: number) => string }) {
   const year = new Date().getFullYear();
   const balances = useLeaveBalances(employeeId, year);
   if (!balances.data || balances.data.length === 0) return null;
@@ -280,7 +296,7 @@ function BalancesPanel({ employeeId }: { employeeId: number }) {
       <span className="font-semibold text-[var(--color-ink)]">Balances {year}:</span>{' '}
       {balances.data.map((b) => (
         <span key={b.id} className="ml-2 text-[var(--color-muted)]">
-          type {b.leaveTypeId}: <strong className="text-[var(--color-ink)]">{b.remainingDays}</strong>/{b.entitledDays}
+          {typeName(b.leaveTypeId)}: <strong className="text-[var(--color-ink)]">{b.remainingDays}</strong>/{b.entitledDays}
         </span>
       ))}
     </div>

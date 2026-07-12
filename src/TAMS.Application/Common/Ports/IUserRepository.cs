@@ -15,6 +15,9 @@ public interface IUserRepository
 
     Task<bool> UserNameExistsAsync(string userName, CancellationToken cancellationToken = default);
 
+    /// <summary>True if another user is already linked to this employee (one login per employee).</summary>
+    Task<bool> EmployeeLinkExistsAsync(long employeeId, long? excludeUserId, CancellationToken cancellationToken = default);
+
     Task AddAsync(User user, CancellationToken cancellationToken = default);
 
     /// <summary>Resolves role entities (with permissions) by name, for assignment.</summary>

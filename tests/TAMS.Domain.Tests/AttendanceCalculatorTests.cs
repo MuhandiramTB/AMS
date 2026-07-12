@@ -76,6 +76,14 @@ public sealed class AttendanceCalculatorTests
     }
 
     [Fact]
+    public void WorkBeyondEnd_PastThreshold_CreditsOnlyExcessOverThreshold()
+    {
+        // 60 min beyond end, threshold 30 → only the 30 minutes past the threshold count.
+        var result = _calc.Calculate(WorkDate, DayShift(otThreshold: 30), [In(9, 0), Out(18, 0)]);
+        result.OvertimeMinutes.Should().Be(30);
+    }
+
+    [Fact]
     public void OvernightShift_CrossingMidnight_ComputesWorkedHoursCorrectly()
     {
         // Night shift 22:00 → 06:00 next day. In 22:00, out 06:00 (+1 day).

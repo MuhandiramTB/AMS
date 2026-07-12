@@ -18,18 +18,23 @@ public sealed class ReportingRepository : IReportingRepository
     public ReportingRepository(TamsDbContext db) => _db = db;
 
     public async Task<AttendanceSummary> GetAttendanceSummaryAsync(
-        DateOnly workDate, long? departmentId, CancellationToken cancellationToken = default)
+        DateOnly workDate, long? departmentId, long? employeeId, CancellationToken cancellationToken = default)
     {
         // Join records for the date to their employee (for department + scoping).
         var query =
             from r in _db.AttendanceRecords.AsNoTracking()
             join e in _db.Employees.AsNoTracking() on r.EmployeeId equals e.Id
             where r.WorkDate == workDate
-            select new { r.Status, r.LateMinutes, r.EarlyLeaveMinutes, r.WorkedMinutes, e.PrimaryDepartmentId };
+            select new { r.EmployeeId, r.Status, r.LateMinutes, r.EarlyLeaveMinutes, r.WorkedMinutes, e.PrimaryDepartmentId };
 
         if (departmentId is not null)
         {
             query = query.Where(x => x.PrimaryDepartmentId == departmentId);
+        }
+        // Server-derived own-record scope: a restricted caller only sees themselves.
+        if (employeeId is not null)
+        {
+            query = query.Where(x => x.EmployeeId == employeeId);
         }
 
         // Aggregate in SQL (GroupBy → conditional COUNTs) so the DB returns one row
@@ -107,7 +112,7 @@ public sealed class ReportingRepository : IReportingRepository
     }
 
     public async Task<IReadOnlyList<ExceptionRow>> GetOpenExceptionsAsync(
-        DateOnly? fromDate, DateOnly? toDate, long? departmentId, CancellationToken cancellationToken = default)
+        DateOnly? fromDate, DateOnly? toDate, long? departmentId, long? employeeId, CancellationToken cancellationToken = default)
     {
         var query =
             from r in _db.AttendanceRecords.AsNoTracking()
@@ -119,6 +124,8 @@ public sealed class ReportingRepository : IReportingRepository
         if (fromDate is not null) query = query.Where(x => x.WorkDate >= fromDate);
         if (toDate is not null) query = query.Where(x => x.WorkDate <= toDate);
         if (departmentId is not null) query = query.Where(x => x.PrimaryDepartmentId == departmentId);
+        // Own-record scope for restricted callers (OWASP A01 — mirrors the read path).
+        if (employeeId is not null) query = query.Where(x => x.EmployeeId == employeeId);
 
         var rows = await query
             .OrderByDescending(x => x.WorkDate)

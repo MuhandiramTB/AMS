@@ -18,6 +18,7 @@ import type {
   Shift,
   SyncDeviceResult,
   TestConnectionResult,
+  UnresolvedPunch,
 } from './types';
 
 // React Query owns all server state — caching, retries, invalidation (07 §9).
@@ -89,6 +90,36 @@ export function useEmployees(page: number, pageSize: number, departmentId?: numb
     // Keep showing the previous page's rows while the next page loads (08 §7).
     placeholderData: keepPreviousData,
   });
+}
+
+/**
+ * Lightweight id → display-name lookup for rendering employee names where a list
+ * only carries employeeId (attendance, leave, dashboard). Fetches the first page
+ * (API caps pageSize at 100) and exposes a formatter that falls back to "#<id>"
+ * for ids not in the cache, so a large roster still renders something meaningful.
+ */
+export function useEmployeeNames() {
+  const query = useQuery({
+    queryKey: ['employee-names'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<PagedResult<Employee>>('/employees', {
+        params: { page: 1, pageSize: 100 },
+      });
+      const map = new Map<number, string>();
+      for (const e of data.items) {
+        map.set(e.id, `${e.firstName} ${e.lastName} (${e.employeeNo})`);
+      }
+      return map;
+    },
+    staleTime: 5 * 60 * 1000, // names change rarely; avoid refetch churn
+  });
+
+  const nameFor = (employeeId: number | null | undefined): string => {
+    if (employeeId == null) return '—';
+    return query.data?.get(employeeId) ?? `#${employeeId}`;
+  };
+
+  return { nameFor, ...query };
 }
 
 export interface CreateEmployeeInput {
@@ -249,6 +280,18 @@ export function useAttendanceRecords(
     queryFn: async () =>
       (await apiClient.get<PagedResult<AttendanceRecord>>('/attendance/records', {
         params: { page, pageSize, ...filters },
+      })).data,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Device punches captured but not yet linked to an employee (admin fix queue). */
+export function useUnresolvedPunches(page: number, pageSize: number, deviceId?: number) {
+  return useQuery({
+    queryKey: ['unresolved-punches', page, pageSize, deviceId ?? null],
+    queryFn: async () =>
+      (await apiClient.get<PagedResult<UnresolvedPunch>>('/attendance/unresolved-punches', {
+        params: { page, pageSize, deviceId },
       })).data,
     placeholderData: keepPreviousData,
   });

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TAMS.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using TAMS.Infrastructure.Persistence;
 namespace TAMS.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(TamsDbContext))]
-    partial class TamsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260712072819_AuditFixes_EnrollmentFk")]
+    partial class AuditFixes_EnrollmentFk
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1130,15 +1133,6 @@ namespace TAMS.Infrastructure.Persistence.Migrations
                     b.HasOne("TAMS.Domain.Attendance.AttendanceRecord", null)
                         .WithMany("Exceptions")
                         .HasForeignKey("AttendanceRecordId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("TAMS.Domain.Devices.DeviceEventLog", b =>
-                {
-                    b.HasOne("TAMS.Domain.Devices.Device", null)
-                        .WithMany()
-                        .HasForeignKey("DeviceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

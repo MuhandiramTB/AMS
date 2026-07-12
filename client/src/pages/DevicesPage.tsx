@@ -4,6 +4,7 @@ import {
   useDevices,
   useDeviceEnrollments,
   useDisableDevice,
+  useEmployeeNames,
   useEmployees,
   useEnableDevice,
   useEnrollEmployee,
@@ -11,10 +12,11 @@ import {
   useRegisterDevice,
   useSyncDevice,
   useTestDevice,
+  useUnresolvedPunches,
   type RegisterDeviceInput,
 } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { ApiError, applyApiFieldErrors } from '../api/client';
 import {
   AsyncView,
   ActionIcons,
@@ -22,19 +24,24 @@ import {
   Card,
   ConfirmDialog,
   DataTable,
+  DEFAULT_PAGE_SIZE,
   Field,
+  FormError,
   IconButton,
   Input,
   Modal,
   PageHeader,
+  Pagination,
   SearchInput,
   SearchableSelect,
+  Select,
   StatusPill,
   Td,
   Th,
   Toolbar,
   Tr,
 } from '../components/ui';
+import { useDebounced } from '../lib/useDebounced';
 import type { Device, ReconcileResult, SyncDeviceResult, TestConnectionResult } from '../api/types';
 
 function relativeTime(iso: string | null): string {
@@ -154,7 +161,7 @@ export function DevicesPage() {
         >
           {filtered.length === 0 ? (
             <tr>
-              <Td>
+              <Td colSpan={5}>
                 <span className="text-[var(--color-muted)]">No devices match your search.</span>
               </Td>
             </tr>
@@ -174,7 +181,77 @@ export function DevicesPage() {
       </AsyncView>
 
       {selected && <EnrollmentPanel device={selected} canManage={canManage} onMessage={setMessage} />}
+
+      {canManage && <UnresolvedPunchesPanel devices={devices.data ?? []} />}
     </div>
+  );
+}
+
+/** Admin fix-queue: device punches captured but not yet linked to any employee.
+ *  These need an enrollment mapping (DeviceUserId → employee) before they count.
+ *  (FR-ZK-003, BRULE-09.) */
+function UnresolvedPunchesPanel({ devices }: { devices: Device[] }) {
+  const [page, setPage] = useState(1);
+  const [deviceId, setDeviceId] = useState('');
+  const punches = useUnresolvedPunches(page, DEFAULT_PAGE_SIZE, deviceId ? Number(deviceId) : undefined);
+  const deviceName = (id: number) => devices.find((d) => d.id === id)?.name ?? `#${id}`;
+
+  // Hide the panel entirely when there's nothing to resolve and no filter active.
+  if (!deviceId && punches.data && punches.data.totalCount === 0) return null;
+
+  return (
+    <Card className="mt-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-[var(--radius-md)] bg-[var(--color-late-bg)] text-[var(--color-late)]" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+          <div>
+            <h2 className="text-base font-semibold leading-tight text-[var(--color-ink)]">Unresolved punches</h2>
+            <p className="text-xs text-[var(--color-muted)]">Captured punches with no employee link. Enroll the device user ID to resolve them.</p>
+          </div>
+        </div>
+        <div className="w-56">
+          <label htmlFor="unres-device" className="sr-only">Filter by device</label>
+          <Select id="unres-device" value={deviceId} onChange={(e) => { setDeviceId(e.target.value); setPage(1); }}>
+            <option value="">All devices</option>
+            {devices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Select>
+        </div>
+      </div>
+
+      <AsyncView
+        isLoading={punches.isLoading}
+        isError={punches.isError}
+        error={punches.error}
+        isEmpty={punches.data?.items.length === 0}
+        emptyText="No unresolved punches for this filter."
+      >
+        <DataTable
+          head={
+            <tr>
+              <Th module="devices">Device</Th>
+              <Th module="devices">Device User ID</Th>
+              <Th module="devices">Punched</Th>
+              <Th module="devices">Direction</Th>
+            </tr>
+          }
+        >
+          {punches.data?.items.map((p) => (
+            <Tr key={p.id}>
+              <Td>{deviceName(p.deviceId)}</Td>
+              <Td className="font-mono">{p.deviceUserId}</Td>
+              <Td>{new Date(p.punchedAtUtc).toLocaleString()}</Td>
+              <Td>{p.direction}</Td>
+            </Tr>
+          ))}
+        </DataTable>
+      </AsyncView>
+
+      {punches.data && (
+        <div className="mt-4"><Pagination page={punches.data.page} totalPages={punches.data.totalPages} totalCount={punches.data.totalCount} onPage={setPage} /></div>
+      )}
+    </Card>
   );
 }
 
@@ -313,14 +390,11 @@ function DeviceRow({
         </div>
       </Td>
 
-      {result && (
-        <td className="hidden">
-          <ResultModal result={result} onClose={() => setResult(null)} />
-        </td>
-      )}
-
-      {confirmToggle && (
-        <td className="hidden">
+      {/* Modals portal to <body>, so this cell holds no visible content — it just
+          keeps the JSX valid inside the row. */}
+      <td className="p-0">
+        {result && <ResultModal result={result} onClose={() => setResult(null)} />}
+        {confirmToggle && (
           <ConfirmDialog
             title={device.isEnabled ? 'Disable device?' : 'Enable device?'}
             tone={device.isEnabled ? 'danger' : 'primary'}
@@ -334,8 +408,8 @@ function DeviceRow({
             onConfirm={doToggle}
             onCancel={() => setConfirmToggle(false)}
           />
-        </td>
-      )}
+        )}
+      </td>
     </Tr>
   );
 }
@@ -418,21 +492,25 @@ function EnrollmentPanel({
   const enrollments = useDeviceEnrollments(device.id);
   const enroll = useEnrollEmployee();
   const form = useForm<{ deviceUserId: string }>();
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<unknown>(null);
 
-  // ONE searchable employee dropdown (type to filter, click to pick). We load the
-  // roster once and the Combobox filters it in-place — no separate search box.
+  // ONE searchable employee dropdown. The API caps pageSize at 100, so for large
+  // rosters we search server-side: the dropdown's search box drives the `q` param
+  // rather than filtering a truncated first-100 in the browser.
   const [employeeId, setEmployeeId] = useState('');
-  // The API caps pageSize at 100; load the first page as the dropdown source.
-  const employees = useEmployees(1, 100);
+  const [empSearch, setEmpSearch] = useState('');
+  const debouncedSearch = useDebounced(empSearch);
+  const employees = useEmployees(1, 100, undefined, debouncedSearch);
+  const { nameFor } = useEmployeeNames();
   const employeeOptions = (employees.data?.items ?? []).map((e) => ({
     value: String(e.id),
     label: `${e.employeeNo} — ${e.firstName} ${e.lastName}`,
   }));
+  const truncated = (employees.data?.totalCount ?? 0) > employeeOptions.length;
 
   const onSubmit = form.handleSubmit(async (values) => {
     setErr(null);
-    if (!employeeId) { setErr('Choose an employee.'); return; }
+    if (!employeeId) { setErr(new Error('Choose an employee.')); return; }
     try {
       await enroll.mutateAsync({
         deviceId: device.id,
@@ -441,9 +519,11 @@ function EnrollmentPanel({
       });
       form.reset();
       setEmployeeId('');
+      setEmpSearch('');
       onMessage('Employee enrolled.');
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Enrollment failed.');
+      applyApiFieldErrors(e, form.setError as never, ['deviceUserId']);
+      setErr(e);
     }
   });
 
@@ -469,6 +549,8 @@ function EnrollmentPanel({
                 options={employeeOptions}
                 value={employeeId}
                 onChange={setEmployeeId}
+                onSearch={setEmpSearch}
+                truncated={truncated}
                 placeholder="Select employee…"
                 searchPlaceholder="Search by name or no…"
                 emptyText="No matching employee"
@@ -482,6 +564,9 @@ function EnrollmentPanel({
                 placeholder="e.g. 5"
                 {...form.register('deviceUserId', { required: true })}
               />
+              {form.formState.errors.deviceUserId?.message && (
+                <p role="alert" className="mt-1 text-xs font-medium text-[var(--color-danger)]">{form.formState.errors.deviceUserId.message}</p>
+              )}
             </div>
             <div className="pt-[26px]">
               <Button type="submit" variant="primary" loading={enroll.isPending}>
@@ -489,11 +574,7 @@ function EnrollmentPanel({
               </Button>
             </div>
           </div>
-          {err && (
-            <p role="alert" className="mt-3 text-sm font-medium text-[var(--color-danger)]">
-              {err}
-            </p>
-          )}
+          <div className="mt-3"><FormError error={err} /></div>
         </form>
       )}
 
@@ -506,7 +587,7 @@ function EnrollmentPanel({
         <DataTable
           head={
             <tr>
-              <Th module="devices">Employee ID</Th>
+              <Th module="devices">Employee</Th>
               <Th module="devices">Device User ID</Th>
               <Th module="devices">Status</Th>
             </tr>
@@ -514,7 +595,7 @@ function EnrollmentPanel({
         >
           {enrollments.data?.map((e) => (
             <Tr key={e.id}>
-              <Td>{e.employeeId}</Td>
+              <Td>{nameFor(e.employeeId)}</Td>
               <Td className="font-mono">{e.deviceUserId}</Td>
               <Td>
                 <StatusPill

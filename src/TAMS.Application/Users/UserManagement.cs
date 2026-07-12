@@ -61,23 +61,40 @@ public sealed class CreateUserValidator : AbstractValidator<CreateUserCommand>
     }
 }
 
+/// <summary>Only an Administrator may grant the Administrator role — this prevents a
+/// User.Manage operator (who is not an admin) from self-escalating. (06 §5.)</summary>
+internal static class RoleEscalationGuard
+{
+    public static void EnsureAllowed(IReadOnlyList<string> requestedRoles, ICurrentUser currentUser)
+    {
+        var grantsAdmin = requestedRoles.Contains(RoleNames.Administrator);
+        if (grantsAdmin && !currentUser.HasPermission(Permissions.RoleManage))
+        {
+            throw new ForbiddenException("Only an administrator may assign the Administrator role.");
+        }
+    }
+}
+
 public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserDto>
 {
     private readonly IUserRepository _users;
     private readonly IEmployeeRepository _employees;
     private readonly IPasswordHasher _hasher;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICurrentUser _currentUser;
 
-    public CreateUserHandler(IUserRepository users, IEmployeeRepository employees, IPasswordHasher hasher, IUnitOfWork unitOfWork)
+    public CreateUserHandler(IUserRepository users, IEmployeeRepository employees, IPasswordHasher hasher, IUnitOfWork unitOfWork, ICurrentUser currentUser)
     {
         _users = users;
         _employees = employees;
         _hasher = hasher;
         _unitOfWork = unitOfWork;
+        _currentUser = currentUser;
     }
 
     public async Task<UserDto> Handle(CreateUserCommand request, CancellationToken cancellationToken)
     {
+        RoleEscalationGuard.EnsureAllowed(request.Roles, _currentUser);
         if (await _users.UserNameExistsAsync(request.UserName, cancellationToken))
         {
             throw new ConflictException($"A user named '{request.UserName}' already exists.");
@@ -89,9 +106,16 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
             throw new BusinessRuleException("One or more roles do not exist.");
         }
 
-        if (request.EmployeeId is { } empId && !await _employees.ExistsAsync(empId, cancellationToken))
+        if (request.EmployeeId is { } empId)
         {
-            throw new BusinessRuleException($"Employee '{empId}' does not exist.");
+            if (!await _employees.ExistsAsync(empId, cancellationToken))
+            {
+                throw new BusinessRuleException($"Employee '{empId}' does not exist.");
+            }
+            if (await _users.EmployeeLinkExistsAsync(empId, null, cancellationToken))
+            {
+                throw new ConflictException($"Employee '{empId}' is already linked to another user.");
+            }
         }
 
         var user = new User(request.UserName, request.Email, _hasher.Hash(request.Password), request.EmployeeId);
@@ -123,17 +147,21 @@ public sealed class UpdateUserHandler : IRequestHandler<UpdateUserCommand, UserD
     private readonly IEmployeeRepository _employees;
     private readonly IPasswordHasher _hasher;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICurrentUser _currentUser;
 
-    public UpdateUserHandler(IUserRepository users, IEmployeeRepository employees, IPasswordHasher hasher, IUnitOfWork unitOfWork)
+    public UpdateUserHandler(IUserRepository users, IEmployeeRepository employees, IPasswordHasher hasher, IUnitOfWork unitOfWork, ICurrentUser currentUser)
     {
         _users = users;
         _employees = employees;
         _hasher = hasher;
         _unitOfWork = unitOfWork;
+        _currentUser = currentUser;
     }
 
     public async Task<UserDto> Handle(UpdateUserCommand request, CancellationToken cancellationToken)
     {
+        RoleEscalationGuard.EnsureAllowed(request.Roles, _currentUser);
+
         var user = await _users.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException("User", request.Id);
 
@@ -143,9 +171,16 @@ public sealed class UpdateUserHandler : IRequestHandler<UpdateUserCommand, UserD
             throw new BusinessRuleException("One or more roles do not exist.");
         }
 
-        if (request.EmployeeId is { } empId && !await _employees.ExistsAsync(empId, cancellationToken))
+        if (request.EmployeeId is { } empId)
         {
-            throw new BusinessRuleException($"Employee '{empId}' does not exist.");
+            if (!await _employees.ExistsAsync(empId, cancellationToken))
+            {
+                throw new BusinessRuleException($"Employee '{empId}' does not exist.");
+            }
+            if (await _users.EmployeeLinkExistsAsync(empId, request.Id, cancellationToken))
+            {
+                throw new ConflictException($"Employee '{empId}' is already linked to another user.");
+            }
         }
 
         user.UpdateEmail(request.Email);

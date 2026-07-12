@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
-import { useAttendanceRecords, useCorrectAttendance } from '../api/hooks';
+import { useAttendanceRecords, useCorrectAttendance, useEmployeeNames } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { ApiError, applyApiFieldErrors } from '../api/client';
 import {
-  AsyncView, Button, Field, Input, PageHeader, StatusPill, Textarea,
+  AsyncView, Button, Field, FormError, Input, PageHeader, StatusPill, Textarea,
   DataTable, Th, Td, Tr, Toolbar, Pagination, DEFAULT_PAGE_SIZE,
 } from '../components/ui';
 import { useDebounced } from '../lib/useDebounced';
@@ -50,6 +51,7 @@ export function AttendancePage() {
     ...(toDate ? { toDate } : {}),
   };
   const records = useAttendanceRecords(page, DEFAULT_PAGE_SIZE, filters);
+  const { nameFor } = useEmployeeNames();
   const [editing, setEditing] = useState<AttendanceRecord | null>(null);
 
   const resetTo1 = () => setPage(1);
@@ -111,7 +113,7 @@ export function AttendancePage() {
         >
           {records.data?.items.map((r) => (
             <Tr key={r.id}>
-              <Td>{r.employeeId}</Td>
+              <Td>{nameFor(r.employeeId)}</Td>
               <Td>{r.workDate}</Td>
               <Td>{fmt(r.firstInUtc)}</Td>
               <Td>{fmt(r.lastOutUtc)}</Td>
@@ -128,10 +130,10 @@ export function AttendancePage() {
       </AsyncView>
 
       {records.data && (
-        <Pagination page={records.data.page} totalPages={records.data.totalPages} onPage={setPage} />
+        <Pagination page={records.data.page} totalPages={records.data.totalPages} totalCount={records.data.totalCount} onPage={setPage} />
       )}
 
-      {editing && <CorrectionDrawer record={editing} onClose={() => setEditing(null)} />}
+      {editing && <CorrectionDrawer record={editing} employeeName={nameFor(editing.employeeId)} onClose={() => setEditing(null)} />}
     </div>
   );
 }
@@ -150,16 +152,16 @@ interface CorrectionForm {
   reason: string;
 }
 
-function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClose: () => void }) {
+function CorrectionDrawer({ record, employeeName, onClose }: { record: AttendanceRecord; employeeName: string; onClose: () => void }) {
   const correct = useCorrectAttendance();
-  const { register, handleSubmit, formState } = useForm<CorrectionForm>({
+  const { register, handleSubmit, formState, setError: setFieldError } = useForm<CorrectionForm>({
     defaultValues: {
       firstInUtc: toLocalInput(record.firstInUtc),
       lastOutUtc: toLocalInput(record.lastOutUtc),
       reason: '',
     },
   });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -204,6 +206,8 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
     try {
       await correct.mutateAsync({
         id: record.id,
+        // The datetime-local inputs are entered in the browser's LOCAL zone;
+        // new Date(...).toISOString() converts that wall-clock back to UTC for the API.
         firstInUtc: values.firstInUtc ? new Date(values.firstInUtc).toISOString() : null,
         lastOutUtc: values.lastOutUtc ? new Date(values.lastOutUtc).toISOString() : null,
         reason: values.reason,
@@ -212,28 +216,31 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        setError('This record changed since you opened it. Close and reopen to see the latest, then retry.');
-      } else if (e instanceof ApiError) {
-        setError(e.message);
+        setError(new Error('This record changed since you opened it. Close and reopen to see the latest, then retry.'));
       } else {
-        setError('Correction failed.');
+        // Map any server-side validation errors onto the fields; keep the rest for the banner.
+        applyApiFieldErrors(e, setFieldError as never, ['firstInUtc', 'lastOutUtc', 'reason']);
+        setError(e);
       }
     }
   });
 
-  return (
-    <div
-      ref={dialogRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="corr-title"
-      className="fixed inset-y-0 right-0 z-10 flex w-full max-w-md flex-col overflow-auto border-l border-[var(--color-line)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-pop)]"
-    >
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop — dims + blocks the page behind so clicks don't fall through. */}
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="corr-title"
+        className="relative flex w-full max-w-md flex-col overflow-auto border-l border-[var(--color-line)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-pop)]"
+      >
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">Correction</p>
           <h2 id="corr-title" className="mt-0.5 text-lg font-bold tracking-tight text-[var(--color-ink)]">
-            Record — Emp {record.employeeId}, {record.workDate}
+            {employeeName} — {record.workDate}
           </h2>
         </div>
         <button
@@ -258,7 +265,7 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field id="firstIn" label="First in">
+        <Field id="firstIn" label="First in (local time)" error={formState.errors.firstInUtc?.message}>
           <input
             id="firstIn"
             type="datetime-local"
@@ -266,7 +273,7 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
             {...register('firstInUtc')}
           />
         </Field>
-        <Field id="lastOut" label="Last out">
+        <Field id="lastOut" label="Last out (local time)" error={formState.errors.lastOutUtc?.message}>
           <input
             id="lastOut"
             type="datetime-local"
@@ -286,7 +293,7 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
           )}
         </div>
 
-        {error && <p role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-absent-bg)] px-3 py-2 text-sm font-medium text-[var(--color-danger)]">{error}</p>}
+        <FormError error={error} />
 
         <div className="flex gap-2 pt-1">
           <Button type="submit" variant="primary" loading={correct.isPending} disabled={correct.isPending}>
@@ -298,6 +305,8 @@ function CorrectionDrawer({ record, onClose }: { record: AttendanceRecord; onClo
           Raw device punches are immutable; corrections adjust the record only and are fully audited.
         </p>
       </form>
-    </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

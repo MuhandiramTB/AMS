@@ -5,19 +5,22 @@ using TAMS.Infrastructure.Persistence;
 
 namespace TAMS.Api.Controllers;
 
-/// <summary>Liveness/readiness endpoints. (05 §10.9, NFR-26.)</summary>
+/// <summary>Liveness/readiness endpoints. (05 §10.9, NFR-26.) Exposed at BOTH the
+/// conventional root path (/health/*) — what the reverse proxy and external monitors
+/// probe — and the versioned API path (/api/v1/health/*).</summary>
 [ApiController]
-[Route("api/v1/health")]
 [AllowAnonymous]
 [DisableRateLimiting] // monitoring probes must not be throttled
 public sealed class HealthController : ControllerBase
 {
-    /// <summary>GET /api/v1/health/live — process is up.</summary>
-    [HttpGet("live")]
+    /// <summary>GET /health/live (and /api/v1/health/live) — process is up.</summary>
+    [HttpGet("/health/live")]
+    [HttpGet("/api/v1/health/live")]
     public IActionResult Live() => Ok(new { status = "live" });
 
-    /// <summary>GET /api/v1/health/ready — dependencies (DB) reachable.</summary>
-    [HttpGet("ready")]
+    /// <summary>GET /health/ready (and /api/v1/health/ready) — dependencies (DB) reachable.</summary>
+    [HttpGet("/health/ready")]
+    [HttpGet("/api/v1/health/ready")]
     public async Task<IActionResult> Ready(
         [FromServices] TamsDbContext db,
         CancellationToken cancellationToken)

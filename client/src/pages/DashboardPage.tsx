@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { useAttendanceSummary, useLeaveRequests } from '../api/hooks';
+import { useAttendanceSummary, useEmployeeNames, useLeaveRequests } from '../api/hooks';
 import type { AttendanceSummary } from '../api/types';
 import { AsyncView, Card, StatTile, StatusPill, PageHeader, Button } from '../components/ui';
 
@@ -70,6 +70,7 @@ export function DashboardPage() {
 /** Manager/HR panel — leave requests waiting for approval. */
 function ApprovalsPanel() {
   const pending = useLeaveRequests(1, 5, { status: 'Submitted' });
+  const { nameFor } = useEmployeeNames();
   return (
     <Card pad={false}>
       <div className="flex items-center justify-between px-5 py-4">
@@ -86,7 +87,7 @@ function ApprovalsPanel() {
           <ul className="divide-y divide-[var(--color-line-soft)]">
             {pending.data?.items.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <span className="text-[var(--color-ink-soft)]">Employee #{r.employeeId} · {r.startDate} → {r.endDate}</span>
+                <span className="text-[var(--color-ink-soft)]">{nameFor(r.employeeId)} · {r.startDate} → {r.endDate}</span>
                 <StatusPill tone="info" label={`${r.dayCount} day(s)`} />
               </li>
             ))}

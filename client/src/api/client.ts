@@ -122,3 +122,32 @@ export function errorStatus(error: unknown): number | undefined {
   if (axios.isAxiosError(error)) return error.response?.status;
   return undefined;
 }
+
+/**
+ * Maps an ApiError's server-side validation errors onto React Hook Form fields.
+ * `setError` is RHF's setError; `fieldMap` optionally remaps server keys (which are
+ * PascalCase, e.g. "StartDate") to form field names ("startDate"). Server keys are
+ * matched case-insensitively against the provided known fields as a fallback so a
+ * caller usually needs no map at all. Returns true if any field error was applied.
+ */
+export function applyApiFieldErrors(
+  error: unknown,
+  setError: (name: string, err: { type: string; message: string }) => void,
+  knownFields: string[] = [],
+): boolean {
+  if (!(error instanceof ApiError) || !error.fieldErrors) return false;
+  let applied = false;
+  for (const [serverKey, messages] of Object.entries(error.fieldErrors)) {
+    const message = messages?.[0];
+    if (!message) continue;
+    // Exact match, else case-insensitive match against a known form field.
+    const target =
+      knownFields.find((f) => f === serverKey) ??
+      knownFields.find((f) => f.toLowerCase() === serverKey.toLowerCase()) ??
+      // Fall back to a camelCased server key (StartDate -> startDate).
+      serverKey.charAt(0).toLowerCase() + serverKey.slice(1);
+    setError(target, { type: 'server', message });
+    applied = true;
+  }
+  return applied;
+}

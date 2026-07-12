@@ -38,6 +38,10 @@ public sealed class DeviceRepository : IDeviceRepository
         _db.EmployeeDeviceEnrollments.AnyAsync(
             e => e.DeviceId == deviceId && e.DeviceUserId == deviceUserId, cancellationToken);
 
+    public Task<EmployeeDeviceEnrollment?> GetEnrollmentBySlotAsync(long deviceId, string deviceUserId, CancellationToken cancellationToken = default) =>
+        _db.EmployeeDeviceEnrollments.FirstOrDefaultAsync(
+            e => e.DeviceId == deviceId && e.DeviceUserId == deviceUserId, cancellationToken);
+
     public async Task AddEnrollmentAsync(EmployeeDeviceEnrollment enrollment, CancellationToken cancellationToken = default) =>
         await _db.EmployeeDeviceEnrollments.AddAsync(enrollment, cancellationToken);
 

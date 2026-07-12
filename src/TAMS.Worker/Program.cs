@@ -39,6 +39,10 @@ using (var scope = host.Services.CreateScope())
     var services = scope.ServiceProvider;
     var startupLogger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
     var db = services.GetRequiredService<TAMS.Infrastructure.Persistence.TamsDbContext>();
+    // Readiness is a STARTUP gate only: the worker refuses to start unless the DB is
+    // reachable (prod) or migrated (dev). It exposes no HTTP health endpoint by design —
+    // it is a background poller, so its liveness is observed via `restart: unless-stopped`
+    // and its structured per-device sync logs, not a probe. (11 §7, ADR-002.)
     try
     {
         if (builder.Environment.IsDevelopment())

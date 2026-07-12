@@ -22,8 +22,18 @@ RUN dotnet publish src/TAMS.Api/TAMS.Api.csproj -c Release -o /app/publish --no-
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
+# curl is used by the container HEALTHCHECK to probe /health/ready. Installed as
+# root before dropping to the non-root app user.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Run as the non-root user shipped in the base image (least privilege, 06 §5).
 USER $APP_UID
+
+# Liveness/readiness probe — the API is only "healthy" once the DB is reachable.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsS http://localhost:8080/health/ready || exit 1
 
 # The reverse proxy terminates TLS and forwards to Kestrel over HTTP (11 §7/§11).
 ENV ASPNETCORE_URLS=http://+:8080

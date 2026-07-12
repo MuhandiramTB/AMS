@@ -31,6 +31,9 @@ public sealed class UserRepository : IUserRepository
     public Task<bool> UserNameExistsAsync(string userName, CancellationToken cancellationToken = default) =>
         _db.Users.AnyAsync(u => u.UserName == userName, cancellationToken);
 
+    public Task<bool> EmployeeLinkExistsAsync(long employeeId, long? excludeUserId, CancellationToken cancellationToken = default) =>
+        _db.Users.AnyAsync(u => u.EmployeeId == employeeId && (excludeUserId == null || u.Id != excludeUserId), cancellationToken);
+
     public async Task AddAsync(User user, CancellationToken cancellationToken = default) =>
         await _db.Users.AddAsync(user, cancellationToken);
 

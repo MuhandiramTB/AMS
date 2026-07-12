@@ -49,6 +49,14 @@ services:
     networks: [app-tier]
     restart: unless-stopped
     expose: ["8080"]
+    # Readiness gate — the image ships a HEALTHCHECK hitting /health/ready; the proxy
+    # waits for this before accepting traffic so requests never hit a not-yet-ready API.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   worker:
     build:
@@ -80,7 +88,9 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ${TAMS_TLS_CERT_DIR:?set in .env}:/etc/nginx/certs:ro
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_healthy
     networks: [app-tier]
     restart: unless-stopped
 

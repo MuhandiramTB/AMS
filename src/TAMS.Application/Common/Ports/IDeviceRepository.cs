@@ -18,6 +18,8 @@ public interface IDeviceRepository
 
     // Enrollments
     Task<bool> EnrollmentExistsAsync(long deviceId, string deviceUserId, CancellationToken cancellationToken = default);
+    /// <summary>The enrollment for a device slot (active OR inactive), for re-use on re-enroll.</summary>
+    Task<EmployeeDeviceEnrollment?> GetEnrollmentBySlotAsync(long deviceId, string deviceUserId, CancellationToken cancellationToken = default);
     Task AddEnrollmentAsync(EmployeeDeviceEnrollment enrollment, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<EmployeeDeviceEnrollment>> GetEnrollmentsForEmployeeAsync(long employeeId, CancellationToken cancellationToken = default);
 

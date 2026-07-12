@@ -36,4 +36,13 @@ public sealed class EmployeeDeviceEnrollment : AuditableEntity
     public bool IsActive { get; private set; }
 
     public void Deactivate() => IsActive = false;
+
+    /// <summary>Re-uses a freed device slot: point it at a new employee and reactivate.
+    /// Lets a slot vacated by a leaver be enrolled to a new hire without a duplicate
+    /// row (the (device, deviceUserId) pair is unique). (FR-ZK-003.)</summary>
+    public void ReassignTo(long employeeId)
+    {
+        EmployeeId = employeeId;
+        IsActive = true;
+    }
 }

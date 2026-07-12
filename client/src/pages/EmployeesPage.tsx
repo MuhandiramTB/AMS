@@ -160,6 +160,7 @@ export function EmployeesPage() {
                 <tr>
                   <Th module="employees">Employee No</Th>
                   <Th module="employees">Name</Th>
+                  <Th module="employees">Department</Th>
                   <Th module="employees">Email</Th>
                   <Th module="employees">Status</Th>
                   {canWrite && <Th module="employees"><span className="sr-only">Actions</span></Th>}
@@ -170,6 +171,7 @@ export function EmployeesPage() {
                 <Tr key={e.id}>
                   <Td className="font-mono font-medium text-[var(--color-ink)]">{e.employeeNo}</Td>
                   <Td>{e.firstName} {e.lastName}</Td>
+                  <Td>{departments?.find((d) => d.id === e.primaryDepartmentId)?.name ?? `#${e.primaryDepartmentId}`}</Td>
                   <Td className="text-[var(--color-muted)]">{e.email ?? '—'}</Td>
                   <Td>
                     <StatusPill tone={e.isActive ? 'success' : 'neutral'} label={e.isActive ? 'Active' : 'Inactive'} />

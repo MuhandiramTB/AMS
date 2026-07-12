@@ -106,12 +106,30 @@ public sealed class AuditTrailBuilder
                 actor,
                 $"{typeName}.{action}",
                 typeName,
-                change.Entity.Id.ToString(), // populated for inserts after the business save
+                ResolveEntityId(context, change.Entity), // real PK, even when it isn't Entity.Id
                 change.OldValues,
                 change.NewValues,
                 _correlation.CorrelationId,
                 now));
         }
+    }
+
+    /// <summary>The audited entity id. Most entities key on <see cref="Entity.Id"/>, but
+    /// some (e.g. DeviceSyncState) key on a different column and ignore Id, leaving it 0.
+    /// Read the real primary-key value(s) from EF metadata so the audit trail records the
+    /// actual identity rather than "0". Runs after the business save, so inserted keys exist.</summary>
+    private static string ResolveEntityId(DbContext context, Entity entity)
+    {
+        var entry = context.Entry(entity);
+        var key = entry.Metadata.FindPrimaryKey();
+        if (key is null)
+        {
+            return entity.Id.ToString();
+        }
+
+        var parts = key.Properties
+            .Select(p => entry.Property(p.Name).CurrentValue?.ToString() ?? string.Empty);
+        return string.Join(":", parts);
     }
 
     private static string? Serialize(EntityEntry entry, bool original)

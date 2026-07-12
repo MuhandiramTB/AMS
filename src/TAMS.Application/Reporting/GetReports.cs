@@ -14,11 +14,23 @@ public sealed record GetAttendanceSummaryQuery(DateOnly WorkDate, long? Departme
 public sealed class GetAttendanceSummaryHandler : IRequestHandler<GetAttendanceSummaryQuery, AttendanceSummaryDto>
 {
     private readonly IReportingRepository _reporting;
-    public GetAttendanceSummaryHandler(IReportingRepository reporting) => _reporting = reporting;
+    private readonly ICurrentUser _currentUser;
+
+    public GetAttendanceSummaryHandler(IReportingRepository reporting, ICurrentUser currentUser)
+    {
+        _reporting = reporting;
+        _currentUser = currentUser;
+    }
 
     public async Task<AttendanceSummaryDto> Handle(GetAttendanceSummaryQuery request, CancellationToken cancellationToken)
     {
-        var summary = await _reporting.GetAttendanceSummaryAsync(request.WorkDate, request.DepartmentId, cancellationToken);
+        // Server-derived scope: a caller without AttendanceReadAll only sees their own
+        // day (or nothing if unlinked), never org/department-wide counts. (06 §5.)
+        var scope = DataScope.For(_currentUser, Permissions.AttendanceReadAll);
+        var employeeFilter = scope.IsUnrestricted ? null : scope.ResolveEmployeeFilter(null);
+
+        var summary = await _reporting.GetAttendanceSummaryAsync(
+            request.WorkDate, scope.IsUnrestricted ? request.DepartmentId : null, employeeFilter, cancellationToken);
         return AttendanceSummaryDto.From(summary);
     }
 }
@@ -73,11 +85,24 @@ public sealed class GetExceptionsReportHandler
     : IRequestHandler<GetExceptionsReportQuery, IReadOnlyList<ExceptionRowDto>>
 {
     private readonly IReportingRepository _reporting;
-    public GetExceptionsReportHandler(IReportingRepository reporting) => _reporting = reporting;
+    private readonly ICurrentUser _currentUser;
+
+    public GetExceptionsReportHandler(IReportingRepository reporting, ICurrentUser currentUser)
+    {
+        _reporting = reporting;
+        _currentUser = currentUser;
+    }
 
     public async Task<IReadOnlyList<ExceptionRowDto>> Handle(GetExceptionsReportQuery request, CancellationToken cancellationToken)
     {
-        var rows = await _reporting.GetOpenExceptionsAsync(request.FromDate, request.ToDate, request.DepartmentId, cancellationToken);
+        // Server-derived scope (was an IDOR): a restricted caller only sees their own
+        // exceptions and cannot widen via a client departmentId. (06 §5, OWASP A01.)
+        var scope = DataScope.For(_currentUser, Permissions.AttendanceReadAll);
+        var employeeFilter = scope.IsUnrestricted ? null : scope.ResolveEmployeeFilter(null);
+
+        var rows = await _reporting.GetOpenExceptionsAsync(
+            request.FromDate, request.ToDate, scope.IsUnrestricted ? request.DepartmentId : null,
+            employeeFilter, cancellationToken);
         return rows.Select(ExceptionRowDto.From).ToList();
     }
 }
