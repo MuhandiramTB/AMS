@@ -15,6 +15,31 @@ function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : 'never';
 }
 
+/** Eye toggle overlaid on a password input. The input must reserve right padding. */
+function PasswordToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={shown ? 'Hide password' : 'Show password'}
+      aria-pressed={shown}
+      className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] focus:text-[var(--color-brand-600)] focus:outline-none"
+    >
+      {shown ? (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19M6.61 6.61A18.5 18.5 0 0 0 2 12s3 8 10 8a9.1 9.1 0 0 0 5.39-1.61" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24M1 1l22 22" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M2 12s3-8 10-8 10 8 10 8-3 8-10 8-10-8-10-8Z" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export function UsersPage() {
   const users = useUsers();
   const roles = useRoles();
@@ -119,6 +144,7 @@ function CreateUserModal({ roles, employees, onClose, onSaved }: { roles: string
   const create = useCreateUser();
   const { register, handleSubmit, formState } = useForm<CreateForm>();
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = handleSubmit(async (v) => {
     setError(null);
@@ -147,7 +173,10 @@ function CreateUserModal({ roles, employees, onClose, onSaved }: { roles: string
           <Input id="u-email" type="email" {...register('email', { required: 'Required' })} />
         </Field>
         <Field id="u-pass" label="Password" required hint="At least 8 characters." error={formState.errors.password?.message}>
-          <Input id="u-pass" type="password" {...register('password', { required: 'Required', minLength: { value: 8, message: 'At least 8 characters.' } })} />
+          <div className="relative">
+            <Input id="u-pass" type={showPassword ? 'text' : 'password'} className="pr-11" {...register('password', { required: 'Required', minLength: { value: 8, message: 'At least 8 characters.' } })} />
+            <PasswordToggle shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+          </div>
         </Field>
         <Field id="u-role" label="Role" required error={formState.errors.role?.message}>
           <Select id="u-role" defaultValue="" {...register('role', { required: 'Select a role.' })}>
@@ -173,6 +202,7 @@ function EditUserModal({ user, roles, employees, onClose, onSaved }: { user: Adm
     defaultValues: { email: user.email, newPassword: '', role: user.roles[0] ?? '', employeeId: user.employeeId?.toString() ?? '' },
   });
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     reset({ email: user.email, newPassword: '', role: user.roles[0] ?? '', employeeId: user.employeeId?.toString() ?? '' });
@@ -213,7 +243,10 @@ function EditUserModal({ user, roles, employees, onClose, onSaved }: { user: Adm
           </Select>
         </Field>
         <Field id="eu-pass" label="Reset password" hint="Leave blank to keep the current password.">
-          <Input id="eu-pass" type="password" autoComplete="new-password" {...register('newPassword')} />
+          <div className="relative">
+            <Input id="eu-pass" type={showPassword ? 'text' : 'password'} className="pr-11" autoComplete="new-password" {...register('newPassword')} />
+            <PasswordToggle shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+          </div>
         </Field>
         {error && <p role="alert" className="text-sm font-medium text-[var(--color-danger)]">{error}</p>}
       </form>
